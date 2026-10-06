@@ -83,5 +83,5 @@ class Donation(Base):
 
     donor = relationship(
         "User",
-        backref="donations",
+        back_populates="donations",
     )

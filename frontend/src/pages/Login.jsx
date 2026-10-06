@@ -1,27 +1,46 @@
-function Login({ role, onBack, onRegister }) {
+import { useState } from 'react'
+import RoleSelector from '../components/RoleSelector'
+
+function Login({ role, onRoleChange, onRegister }) {
+  const [message, setMessage] = useState('')
+
   function handleSubmit(event) {
     event.preventDefault()
+    setMessage(`Mock ${role} login submitted. No account was accessed.`)
   }
 
   return (
-    <main className="page login-page">
-      <button className="back-button" type="button" onClick={onBack}>
-        ← Back to roles
-      </button>
+    <main className="auth-page">
+      <section className="auth-intro">
+        <p className="eyebrow">SDG 2 · ZERO HUNGER</p>
+        <h1>Food shared with purpose.</h1>
+        <p>
+          A simple place for donors and NGOs to coordinate surplus food and
+          community needs.
+        </p>
+        <div className="role-summary">
+          <span>2 roles</span>
+          <span>1 shared mission</span>
+        </div>
+      </section>
 
-      <section className="login-card">
-        <div className="role-label">{role}</div>
-        <h1>Welcome back.</h1>
-        <p className="login-copy">Sign in to continue helping your community.</p>
+      <section className="auth-card" aria-labelledby="login-title">
+        <div className="card-heading">
+          <p className="section-label">Account access</p>
+          <h2 id="login-title">Welcome back</h2>
+          <p>Choose your role and sign in.</p>
+        </div>
+
+        <RoleSelector value={role} onChange={onRoleChange} />
 
         <form onSubmit={handleSubmit}>
-          <label htmlFor="login">Email or phone number</label>
+          <label htmlFor="email">Email</label>
           <input
-            id="login"
-            name="login"
-            type="text"
-            placeholder="Email or phone number"
-            autoComplete="username"
+            id="email"
+            name="email"
+            type="email"
+            placeholder="you@example.com"
+            autoComplete="email"
             required
           />
 
@@ -36,14 +55,16 @@ function Login({ role, onBack, onRegister }) {
           />
 
           <button className="primary-button" type="submit">
-            Sign in
+            Sign in as {role}
           </button>
         </form>
 
-        <p className="register-note">
-          New here?{' '}
+        {message && <p className="form-message">{message}</p>}
+
+        <p className="auth-switch">
+          Need an account?{' '}
           <button type="button" onClick={onRegister}>
-            Create an account
+            Register
           </button>
         </p>
       </section>

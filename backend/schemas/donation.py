@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DonationCreate(BaseModel):
@@ -33,6 +33,13 @@ class DonationCreate(BaseModel):
         min_length=2,
         max_length=500,
     )
+
+    @model_validator(mode="after")
+    def validate_expiry(self):
+        if self.expiry_time <= self.prepared_at:
+            raise ValueError("Expiry time must be later than preparation time.")
+
+        return self
 
 
 class DonationUpdate(BaseModel):
@@ -70,6 +77,17 @@ class DonationUpdate(BaseModel):
         min_length=2,
         max_length=500,
     )
+
+    @model_validator(mode="after")
+    def validate_expiry(self):
+        if (
+            self.prepared_at is not None
+            and self.expiry_time is not None
+            and self.expiry_time <= self.prepared_at
+        ):
+            raise ValueError("Expiry time must be later than preparation time.")
+
+        return self
 
 
 class DonationResponse(BaseModel):

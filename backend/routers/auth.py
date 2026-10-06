@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from database.database import get_db
 from models.user import User
 from schemas.user import UserLogin, UserRegister, UserResponse
+from utils.auth import create_access_token
 from utils.security import hash_password, verify_password
 
 
@@ -84,8 +85,12 @@ def login(
             detail="Invalid email, password, or account type.",
         )
 
+    access_token = create_access_token(user.id)
+
     return {
         "message": "Login successful",
+        "access_token": access_token,
+        "token_type": "bearer",
         "user": {
             "id": user.id,
             "name": user.name,

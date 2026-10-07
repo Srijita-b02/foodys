@@ -8,6 +8,7 @@ from routers.auth import router as auth_router
 from routers.donations import router as donations_router
 from routers.requests import router as requests_router
 from routers.deliveries import router as deliveries_router
+from routers.matches import router as matches_router
 
 
 load_dotenv()
@@ -41,6 +42,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(donations_router)
 app.include_router(requests_router)
+app.include_router(matches_router)
 app.include_router(deliveries_router)
 
 

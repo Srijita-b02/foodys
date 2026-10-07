@@ -22,7 +22,7 @@ class DeliveriesRead(BaseModel):
     status: DeliveryStatus
     assigned_at: datetime
     pickup_time: datetime | None
-    deliveries_time: datetime | None
+    delivery_time: datetime | None
     created_at: datetime
     updated_at: datetime
 

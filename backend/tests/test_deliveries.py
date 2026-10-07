@@ -233,7 +233,7 @@ class DeliveriesTests(unittest.TestCase):
         self.db.refresh(deliveries)
         self.assertEqual(deliveries.status, "in_transit")
 
-    def test_in_transit_to_delivered_succeeds_and_sets_deliveries_time(self):
+    def test_in_transit_to_delivered_succeeds_and_sets_delivery_time(self):
         _, match, deliveries = self.create_match_and_deliveries()
         update_deliveries_status(
             deliveries.id,
@@ -258,7 +258,7 @@ class DeliveriesTests(unittest.TestCase):
         self.db.refresh(deliveries)
         self.db.refresh(match)
         self.assertEqual(deliveries.status, "delivered")
-        self.assertIsNotNone(deliveries.deliveries_time)
+        self.assertIsNotNone(deliveries.delivery_time)
         self.assertEqual(match.status, "completed")
 
     def test_skipped_transitions_fail(self):
@@ -450,7 +450,7 @@ class DeliveriesTests(unittest.TestCase):
         self.db.refresh(request)
 
         self.assertEqual(deliveries.status, "in_transit")
-        self.assertIsNone(deliveries.deliveries_time)
+        self.assertIsNone(deliveries.delivery_time)
         self.assertEqual(match.status, "active")
         self.assertEqual(donation.status, "available")
         self.assertEqual(request.status, "open")

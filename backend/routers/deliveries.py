@@ -228,7 +228,7 @@ def update_deliveries_status(
     # Everything below must succeed together:
     #
     # 1. Delivery -> delivered
-    # 2. deliveries_time set
+    # 2. delivery_time set
     # 3. Match -> completed
     # 4. Donation recalculated
     # 5. FoodRequest recalculated
@@ -237,7 +237,7 @@ def update_deliveries_status(
     # --------------------------------------------------------------
     try:
         deliveries.status = "delivered"
-        deliveries.deliveries_time = now
+        deliveries.delivery_time = now
 
         match = db.scalar(
             select(Match)

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import RoleSelector from '../components/RoleSelector'
 
-function Login({ role, onRoleChange, onRegister }) {
+function Login({ role, onRoleChange, onRegister, onLogin }) {
   const [message, setMessage] = useState('')
 
   function handleSubmit(event) {
     event.preventDefault()
-    setMessage(`Mock ${role} login submitted. No account was accessed.`)
+    onLogin()
+    // setMessage(`Mock ${role} login submitted. No account was accessed.`)
   }
 
   return (

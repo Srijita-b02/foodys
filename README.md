@@ -1,1146 +1,387 @@
 # Foodys
 
-foodys is a database-driven food redistribution platform that connects food donors, NGOs or recipient organizations, and delivery volunteers. It is designed as a two-person academic DBMS project and prioritizes a correct relational database, reliable transactions, and a complete end-to-end workflow over unnecessary product complexity.
+Foodys is a small database-driven food redistribution platform built for an academic DBMS project. It connects food donors with NGO members so usable surplus food can reach people instead of being wasted.
 
-Restaurants, bakeries, hostels, college cafeterias, caterers, event organizers, and other food providers can announce usable surplus food. NGOs can discover and reserve that supply, or publish food requests that donors can answer. Once a donation and recipient are matched, a volunteer completes pickup and delivery.
+The project primarily supports **SDG 2 — Zero Hunger** and also contributes to **SDG 12 — Responsible Consumption and Production**.
 
-The platform supports both directions of discovery:
+## What the system does
 
-```text
-SUPPLY → DEMAND: donor posts food → NGO reserves it
-DEMAND → SUPPLY: NGO posts a request → donor responds
-```
-
-Its primary societal alignment is **SDG 2 — Zero Hunger**. It also supports **SDG 12 — Responsible Consumption and Production** by helping reduce avoidable food waste.
-
-## Project status
-
-The repository is currently at the initialization stage:
-
-- the React/Vite frontend scaffold is installed and passes linting;
-- the Python virtual environment and initial backend dependencies are installed locally;
-- product, engineering, security, and collaboration decisions are documented;
-- database schema, FastAPI routes, application pages, and tests are still to be implemented.
-
-Planned functionality in this document must not be presented as completed until it exists and has been tested.
-
-## Problem statement
-
-Usable surplus food is often discarded while nearby NGOs and recipient organizations still need food. The problem is not only availability; it is timely coordination among current supply, current demand, donors, NGOs, volunteers, reservations, deliveries, expiry times, and transaction history.
-
-foodys provides one structured system to:
-
-- publish time-sensitive surplus food;
-- publish specific food requirements;
-- match supply with demand in either direction;
-- prevent duplicate reservations;
-- coordinate volunteer pickup and delivery;
-- preserve reliable donation and delivery history;
-- calculate impact from real database records;
-- demonstrate core relational DBMS concepts in a working application.
-
-## MVP objectives
-
-The MVP must allow:
-
-- users to register and log in with one of three valid roles;
-- donors to create, view, edit, cancel, and track their donations;
-- NGOs to browse and reserve available food;
-- NGOs to create, manage, and track food requests;
-- donors to browse and answer open NGO requests;
-- volunteers to accept delivery tasks and update valid delivery states;
-- all roles to see data appropriate to their role;
-- the backend and database to protect ownership, state, and transaction consistency;
-- both project members to demonstrate meaningful database work.
-
-## User roles
-
-The application has exactly three primary roles:
+Foodys supports two matching directions:
 
 ```text
-DONOR
-NGO
-VOLUNTEER
+Donor posts available food
+        ↓
+NGO member reserves it
+        ↓
+Match and delivery are created
 ```
 
-Admin functionality is optional and is not an MVP priority.
+```text
+NGO member posts a food request
+        ↓
+Donor responds using an available donation
+        ↓
+Match and delivery are created
+```
+
+The assigned NGO member handles pickup and updates the delivery until it is completed.
+
+## Roles
+
+The application has two roles.
 
 ### Donor
 
-A donor may be a restaurant, bakery, hostel, college cafeteria, catering service, event organizer, food business, or another organization with safe surplus food.
-
-A donor can:
+A donor may be an individual or a restaurant. A donor can:
 
 - register and log in;
-- create a food donation;
-- view their own donations;
-- edit or cancel their own available donations;
-- browse open NGO food requests;
-- filter requests by area or food type;
-- respond to an open request using an available donation;
-- view active matches and pickups;
-- view completed donation history.
+- create a donation;
+- view, edit, or cancel their own available donations;
+- browse open food requests;
+- respond to a request using one of their donations;
+- view their matches.
 
-### NGO / recipient organization
+### NGO member
 
-An NGO can:
+Each NGO member has their own user account. A separate organizations table or organization ID is not used in this MVP. `organization_name` is stored only as profile information.
 
-- register and log in;
-- browse currently available, unexpired food;
-- filter donations by area or food type;
-- reserve an available donation;
-- create a food request with quantity and deadline;
-- view, edit, or cancel its own open requests;
-- view active matches and incoming deliveries;
-- view received-food history.
-
-### Volunteer
-
-A volunteer can:
+An NGO member can:
 
 - register and log in;
-- browse available delivery tasks;
-- accept one available delivery safely;
-- view pickup and recipient details for an assigned delivery;
-- mark the delivery as picked up, in transit, and delivered;
-- view their delivery history.
+- browse available donations;
+- reserve available food;
+- create food requests;
+- view, edit, or cancel their own open requests;
+- see other open requests to avoid duplicate requests;
+- view their matches;
+- view and update only deliveries assigned to them.
 
-Role and ownership rules must be enforced in FastAPI. Hiding a button or route in React is not authorization.
+There is no separate volunteer role. The NGO member assigned to a match is also responsible for pickup and delivery updates.
 
-## Core workflows
+## Technology stack
 
-### Supply-first workflow
-
-The donor already has surplus food:
-
-```text
-DONOR
-  ↓
-CREATE DONATION
-  ↓
-AVAILABLE
-  ↓
-NGO BROWSES AND RESERVES
-  ↓
-MATCH CREATED
-  ↓
-DELIVERY CREATED
-  ↓
-VOLUNTEER ACCEPTS
-  ↓
-PICKED_UP
-  ↓
-IN_TRANSIT
-  ↓
-DELIVERED
-```
-
-### Demand-first workflow
-
-The NGO publishes a requirement first:
-
-```text
-NGO
-  ↓
-CREATE FOOD REQUEST
-  ↓
-OPEN
-  ↓
-DONOR BROWSES AND RESPONDS
-  ↓
-DONATION + MATCH CREATED
-  ↓
-DELIVERY CREATED
-  ↓
-VOLUNTEER ACCEPTS
-  ↓
-PICKED_UP
-  ↓
-IN_TRANSIT
-  ↓
-DELIVERED
-```
-
-Both workflows are required. Bidirectional matching is a defining foodys feature.
-
-## Required technology stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | React with Vite |
-| Frontend language | JavaScript / JSX |
-| Frontend routing | React Router |
-| Styling | CSS and optionally Bootstrap |
-| Backend | FastAPI |
-| Backend language | Python |
-| API | REST over HTTP/JSON |
+| Part | Technology |
+| --- | --- |
+| Frontend | React and Vite |
+| Backend | FastAPI and Python |
 | Database | PostgreSQL |
-| Database access | SQLAlchemy and/or parameterized SQL |
-| Validation | Pydantic plus database constraints |
-| Password hashing | bcrypt / Passlib-compatible hashing |
+| Database access | SQLAlchemy and parameterized SQL |
+| Validation | Pydantic |
+| Styling | CSS |
 | Version control | Git and GitHub |
-| API testing | Swagger UI, Postman, or Bruno |
-| Primary environment | Localhost |
 
-Do not replace this stack with Next.js, Firebase, MongoDB, Supabase Auth, GraphQL, microservices, Redis, Kubernetes, message queues, or complex Docker orchestration unless both project members explicitly change the scope. PostgreSQL is a core learning component.
-
-## System architecture
+## Project structure
 
 ```text
-+-------------------------------+
-| React + Vite frontend         |
-|                               |
-| Login / registration          |
-| Donor dashboard               |
-| NGO dashboard                 |
-| Volunteer dashboard           |
-| Forms, lists, status views    |
-+---------------+---------------+
-                |
-                | REST / JSON
-                ↓
-+-------------------------------+
-| FastAPI backend               |
-|                               |
-| Authentication               |
-| Role and ownership checks     |
-| Pydantic validation           |
-| Donation/request APIs         |
-| Matching transactions         |
-| Delivery state machine        |
-+---------------+---------------+
-                |
-                | SQLAlchemy / SQL
-                ↓
-+-------------------------------+
-| PostgreSQL                    |
-|                               |
-| users                         |
-| donations                     |
-| food_requests                 |
-| matches                       |
-| deliveries                    |
-+-------------------------------+
-```
-
-The backend and database are authoritative. The frontend must refresh from a successful API response instead of inventing reservation or status changes locally.
-
-## Repository layout
-
-The intended working layout is:
-
-```text
-foodys/
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   └── package.json
+resQfood/
 ├── backend/
-│   ├── main.py
-│   ├── database.py
-│   ├── models/
-│   ├── schemas/
-│   ├── routes/
-│   ├── services/
-│   ├── tests/
+│   ├── database/       # Database connection and update scripts
+│   ├── models/         # SQLAlchemy tables
+│   ├── routers/        # FastAPI endpoints
+│   ├── schemas/        # Pydantic request and response models
+│   ├── tests/          # Backend tests
 │   ├── .env.example
+│   ├── init_db.py
+│   ├── main.py
 │   └── requirements.txt
 ├── database/
-│   ├── schema.sql
-│   └── seed.sql
-├── .editorconfig
-├── .gitignore
+│   └── schema.sql      # Complete PostgreSQL schema for a fresh database
+├── frontend/
+│   └── src/
 └── README.md
 ```
 
-Some planned directories are created only when their implementation begins. Keep the structure straightforward and avoid abstraction that hides database behavior.
+## Database design
 
-## Relational database design
-
-The MVP centers on five tables:
-
-```text
-users
-donations
-food_requests
-matches
-deliveries
-```
-
-Conceptual relationships:
-
-```text
-                 USERS
-                   |
-          +--------+--------+
-          |                 |
-          ↓                 ↓
-      DONATIONS       FOOD_REQUESTS
-          \                 /
-           \               /
-            +--- MATCHES --+
-                    |
-                    ↓
-               DELIVERIES
-                    |
-                    ↓
-             VOLUNTEER USER
-```
+The project uses five main relational tables.
 
 ### `users`
 
-Expected fields:
+Stores donor and NGO-member accounts.
+
+Important fields:
 
 ```text
-user_id
-name
-email
-password_hash
-role
-organization_name
-phone
-area
-created_at
+id, name, email, password_hash, phone, role,
+donor_type, organization_name, location,
+created_at, updated_at
 ```
 
-Important rules:
-
-- `user_id` is the primary key;
-- `email` is unique and required;
-- `password_hash` is required and never returned by APIs;
-- `role` is restricted to `DONOR`, `NGO`, or `VOLUNTEER`;
-- only the minimum required personal information is stored.
+- `email` is unique.
+- Passwords are stored only as hashes.
+- `role` is either `donor` or `ngo`.
+- `donor_type` is used only for donors.
+- `organization_name` is profile text used only for NGO members.
 
 ### `donations`
 
-Expected fields:
+Stores food offered by donors.
 
 ```text
-donation_id
-donor_id
-food_name
-food_type
-quantity
-unit
-description
-area
-prepared_at
-expires_at
-status
-created_at
-updated_at
+id, donor_id, food_name, description, category,
+quantity, unit, prepared_at, expiry_time,
+pickup_address, status, created_at, updated_at
 ```
 
-`donor_id` references `users.user_id`. The referenced user must exist and have the `DONOR` role.
-
-Allowed statuses:
-
-```text
-AVAILABLE
-RESERVED
-MATCHED
-ASSIGNED
-PICKED_UP
-IN_TRANSIT
-DELIVERED
-CANCELLED
-EXPIRED
-```
-
-Important rules include `quantity > 0` and `expires_at > prepared_at`.
+`donor_id` is a foreign key to `users.id`.
 
 ### `food_requests`
 
-Expected fields:
+Stores food requirements posted by NGO members.
 
 ```text
-request_id
-ngo_id
-food_name
-food_type
-quantity
-unit
-description
-area
-needed_before
-status
-created_at
-updated_at
+id, ngo_id, food_name, category, quantity, unit,
+description, location, needed_before, status,
+created_at, updated_at
 ```
 
-`ngo_id` references `users.user_id`. The referenced user must exist and have the `NGO` role.
-
-Allowed statuses:
-
-```text
-OPEN
-MATCHED
-FULFILLED
-CANCELLED
-EXPIRED
-```
-
-Important rules include `quantity > 0` and a future `needed_before` value on creation.
+`ngo_id` is a foreign key to the NGO member's `users.id`.
 
 ### `matches`
 
-Expected fields:
+Connects a donation to an NGO member and, when applicable, a food request.
 
 ```text
-match_id
-donation_id
-request_id
-ngo_id
-status
-created_at
+id, donation_id, request_id, ngo_id,
+allocated_quantity, status, created_at, updated_at
 ```
 
-Relationships:
-
-- `donation_id` references `donations.donation_id`;
-- `request_id` references `food_requests.request_id` and may be null when an NGO directly reserves a donation;
-- `ngo_id` references `users.user_id`.
-
-Allowed statuses:
-
-```text
-ACTIVE
-COMPLETED
-CANCELLED
-```
+`request_id` is nullable because an NGO member may directly reserve an available donation without first creating a request. Partial quantities can be matched.
 
 ### `deliveries`
 
-Expected fields:
+Stores delivery ownership and progress.
 
 ```text
-delivery_id
-match_id
-volunteer_id
-status
-assigned_at
-pickup_time
-delivery_time
+id, match_id, assigned_ngo_member_id, status,
+assigned_at, pickup_time, delivery_time,
+created_at, updated_at
 ```
 
-Relationships:
+- One match has one delivery.
+- `assigned_ngo_member_id` references `users.id`.
+- Only the assigned NGO member can view or update that delivery.
 
-- `match_id` references `matches.match_id`;
-- `volunteer_id` references `users.user_id` and is nullable until accepted.
+## Status flow
 
-Allowed statuses:
+### Donation
 
 ```text
-AVAILABLE
-ASSIGNED
-PICKED_UP
-IN_TRANSIT
-DELIVERED
-CANCELLED
+available → reserved/matched → assigned → picked_up
+          → in_transit → delivered
 ```
 
-## Database requirements
+A donation may also become `cancelled` or `expired` when allowed.
 
-This project must visibly demonstrate:
+### Food request
 
-- primary keys;
-- foreign keys;
-- `NOT NULL`, `UNIQUE`, and `CHECK` constraints;
-- referential integrity;
-- normalization without unnecessary duplication;
-- useful indexes;
-- database-side filtering;
-- multi-table joins;
-- aggregate queries;
-- transactions, commit, and rollback;
-- concurrency protection;
-- consistent status transitions.
+```text
+open → matched → fulfilled
+```
 
-Validation belongs in both Pydantic and PostgreSQL where appropriate. React validation is only a usability layer.
+A request may also become `cancelled` or `expired` when allowed.
 
-### Recommended indexes
+### Delivery
 
-Create focused indexes for the main listing queries:
+```text
+assigned → picked_up → in_transit → delivered
+```
+
+Skipped or backward delivery transitions are rejected.
+
+When a delivery becomes `delivered`, the backend completes the related match and updates the donation. If the full request quantity has been delivered, the food request becomes `fulfilled`.
+
+## Transactions and concurrency
+
+Matching is handled as a database transaction.
+
+When an NGO member reserves food, the backend:
+
+1. locks and checks the donation;
+2. checks the remaining quantity;
+3. creates a match;
+4. creates the assigned delivery;
+5. updates the donation status;
+6. commits all changes together.
+
+When a donor responds to a request, the backend also locks the donation and request, validates the remaining quantities, creates the match and delivery, and updates both statuses in one transaction.
+
+If any step fails, the transaction is rolled back. Row locking and status checks prevent duplicate or excessive reservations.
+
+## Main API routes
+
+The FastAPI documentation is available at `http://localhost:8000/docs` while the backend is running.
+
+| Area | Endpoints |
+| --- | --- |
+| Authentication | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
+| Donations | `POST /donations`, `GET /donations`, `GET /donations/my`, `GET/PUT/DELETE /donations/{id}` |
+| Requests | `POST /requests`, `GET /requests`, `GET /requests/my`, `GET/PUT/DELETE /requests/{id}` |
+| Matching | `POST /matches/reserve`, `POST /matches/respond`, `GET /matches`, `GET /matches/{id}` |
+| Deliveries | `GET /deliveries/my`, `GET /deliveries/{id}`, `PATCH /deliveries/{id}/status` |
+
+Role and ownership checks are performed by FastAPI. Hiding a button in React is not treated as authorization.
+
+## Local setup
+
+### Requirements
+
+- Python 3.11 or newer
+- Node.js and npm
+- PostgreSQL
+- Git
+
+### 1. Create the PostgreSQL database
+
+Create a local database, for example:
 
 ```sql
-CREATE INDEX idx_donations_status ON donations(status);
-CREATE INDEX idx_donations_area ON donations(area);
-CREATE INDEX idx_food_requests_status ON food_requests(status);
-CREATE INDEX idx_food_requests_area ON food_requests(area);
+CREATE DATABASE resqfood;
 ```
 
-Do not add indexes without a real filtering, joining, or sorting use case.
+For a fresh database, run `database/schema.sql` using pgAdmin or `psql`.
 
-### Area-based discovery
+### 2. Configure the backend
 
-Location is deliberately simple for the MVP. Store an `area`, such as `Katpadi`, `Vellore`, `Gandhi Nagar`, or `Bagayam`.
-
-Donation discovery should be performed in PostgreSQL:
-
-```sql
-SELECT *
-FROM donations
-WHERE status = 'AVAILABLE'
-  AND area = :area
-  AND expires_at > NOW()
-ORDER BY expires_at ASC;
-```
-
-Request discovery should follow the same principle:
-
-```sql
-SELECT *
-FROM food_requests
-WHERE status = 'OPEN'
-  AND area = :area
-  AND needed_before > NOW()
-ORDER BY needed_before ASC;
-```
-
-Do not load an entire table and filter it in React. GPS, maps, and distance calculations are deferred.
-
-## Transaction and concurrency rules
-
-### NGO reserves an available donation
-
-Reservation is one atomic operation:
-
-```text
-BEGIN
-  conditionally change donation from AVAILABLE
-  create match
-  create AVAILABLE delivery
-COMMIT
-```
-
-On failure, roll back all related writes.
-
-A plain read followed later by an update is unsafe because two NGOs could both see `AVAILABLE`. Use locking or a conditional update:
-
-```sql
-UPDATE donations
-SET status = 'RESERVED', updated_at = NOW()
-WHERE donation_id = :donation_id
-  AND status = 'AVAILABLE'
-  AND expires_at > NOW();
-```
-
-If no row changes, return `409 Conflict`. Only one concurrent reservation may succeed.
-
-This workflow demonstrates atomicity, consistency, isolation, and durability.
-
-### Donor responds to an NGO request
-
-The backend must atomically:
-
-```text
-verify request is OPEN and unexpired
-verify donation is AVAILABLE and unexpired
-create match
-mark request MATCHED
-mark donation MATCHED
-create AVAILABLE delivery
-commit
-```
-
-Any failure must roll back the entire operation.
-
-### Volunteer accepts a delivery
-
-Acceptance must also prevent two volunteers from receiving the same task. Conditionally update only an `AVAILABLE` delivery and return `409 Conflict` if another volunteer already accepted it.
-
-## Delivery state machine
-
-Only these forward transitions are valid:
-
-```text
-AVAILABLE
-   ↓
-ASSIGNED
-   ↓
-PICKED_UP
-   ↓
-IN_TRANSIT
-   ↓
-DELIVERED
-```
-
-Examples that must be rejected include:
-
-```text
-AVAILABLE → DELIVERED
-ASSIGNED → IN_TRANSIT
-ASSIGNED → DELIVERED
-DELIVERED → PICKED_UP
-```
-
-Only the assigned volunteer may update an active assigned delivery.
-
-When a delivery reaches `DELIVERED`, one transaction should update:
-
-```text
-delivery.status = DELIVERED
-delivery.delivery_time = current time
-match.status = COMPLETED
-donation.status = DELIVERED
-food_request.status = FULFILLED, when a request is linked
-```
-
-## Expiry rules
-
-If a donation has `expires_at <= current time` while it is still `AVAILABLE`, set it to `EXPIRED`. If a request has `needed_before <= current time` while it is still `OPEN`, set it to `EXPIRED`.
-
-Expired records remain in the database for history. They must not appear in active listings and must not be reservable or matchable. They are not automatically deleted.
-
-## Authentication and authorization
-
-The MVP uses email/password authentication:
-
-```text
-user submits email and password
-  ↓
-FastAPI finds the user by email
-  ↓
-stored password hash is verified
-  ↓
-user identity and role are established
-  ↓
-authorized role-specific operation continues
-```
-
-Required security baseline:
-
-- hash every password before storage;
-- never store plaintext passwords;
-- never expose password hashes through response models;
-- keep database credentials and secrets in ignored `.env` files;
-- commit only `.env.example` placeholders;
-- authorize roles and record ownership in FastAPI;
-- use SQLAlchemy or parameterized SQL;
-- return `401` when unauthenticated and `403` when authenticated but forbidden;
-- store only the minimum user information required by the application.
-
-OAuth, MFA, email verification, CAPTCHA, advanced encryption infrastructure, security monitoring, rate limiting, and dedicated secret-management platforms are not required for this academic MVP.
-
-## REST API plan
-
-Expected endpoint areas are `/auth`, `/donations`, `/requests`, `/matches`, and `/deliveries`.
-
-### Authentication
-
-```text
-POST /auth/register
-POST /auth/login
-```
-
-### Donations
-
-```text
-GET    /donations
-POST   /donations
-GET    /donations/{id}
-PUT    /donations/{id}
-DELETE /donations/{id}
-```
-
-### Food requests
-
-```text
-GET    /requests
-POST   /requests
-GET    /requests/{id}
-PUT    /requests/{id}
-DELETE /requests/{id}
-```
-
-### Matches
-
-```text
-GET  /matches
-POST /matches/reserve
-POST /matches/respond
-GET  /matches/{id}
-```
-
-### Deliveries
-
-```text
-GET   /deliveries
-GET   /deliveries/available
-POST  /deliveries/{id}/accept
-PATCH /deliveries/{id}/status
-```
-
-Use clear Pydantic request and response models. Return meaningful statuses:
-
-| Status | Meaning |
-|---|---|
-| `200` | Successful request |
-| `201` | Resource created |
-| `400` | Invalid business operation |
-| `401` | Authentication required |
-| `403` | Wrong role, ownership, or permission |
-| `404` | Referenced record does not exist |
-| `409` | State conflict, such as an existing reservation |
-| `422` | Request validation failed |
-
-Never report a failed business operation as `200 OK`.
-
-## Relational query requirements
-
-At least one meaningful delivery-history query should join matches, donations, donor users, NGO users, deliveries, and volunteer users:
-
-```sql
-SELECT
-    d.food_name,
-    donor.name AS donor_name,
-    ngo.name AS ngo_name,
-    volunteer.name AS volunteer_name,
-    dl.status,
-    dl.pickup_time,
-    dl.delivery_time
-FROM matches AS m
-JOIN donations AS d
-  ON m.donation_id = d.donation_id
-JOIN users AS donor
-  ON d.donor_id = donor.user_id
-JOIN users AS ngo
-  ON m.ngo_id = ngo.user_id
-JOIN deliveries AS dl
-  ON dl.match_id = m.match_id
-LEFT JOIN users AS volunteer
-  ON dl.volunteer_id = volunteer.user_id;
-```
-
-Required aggregate examples include:
-
-```sql
-SELECT COUNT(*)
-FROM donations
-WHERE status = 'DELIVERED';
-
-SELECT COALESCE(SUM(quantity), 0)
-FROM donations
-WHERE status = 'DELIVERED';
-
-SELECT COUNT(*)
-FROM food_requests
-WHERE status = 'FULFILLED';
-
-SELECT volunteer_id, COUNT(*) AS completed_deliveries
-FROM deliveries
-WHERE status = 'DELIVERED'
-GROUP BY volunteer_id;
-```
-
-## Frontend plan
-
-Minimum pages:
-
-- Login;
-- Register;
-- Donor Dashboard;
-- Create/Edit Donation;
-- NGO Dashboard;
-- Create/Edit Food Request;
-- Volunteer Dashboard;
-- Delivery Status and History.
-
-Suggested dashboard content:
-
-| Dashboard | Content |
-|---|---|
-| Donor | Post Food, My Donations, Requests in My Area, Active Matches, Active Pickups, Completed Donations |
-| NGO | Create Request, Available Food, My Open Requests, Active Matches, Incoming Deliveries, Received Food |
-| Volunteer | Available Deliveries, Current Assignment, Pickup Details, Recipient Details, Status Actions, History |
-
-Use functional components, React Router, `useState`, `useEffect`, and `fetch` or Axios. Keep components small. Redux, Zustand, and other global-state frameworks are unnecessary unless a real requirement appears.
-
-Each page should show loading, empty, success, and error states. After a mutation, use the API result and refresh authoritative data rather than faking a local status change.
-
-## Local development
-
-### Prerequisites
-
-- Git;
-- PostgreSQL;
-- Python 3 with `venv` and `pip`;
-- Node.js compatible with the installed Vite version (`^20.19.0` or `>=22.12.0`);
-- npm.
-
-Expected local services:
-
-| Service | URL |
-|---|---|
-| React frontend | `http://localhost:5173` |
-| FastAPI backend | `http://localhost:8000` |
-| Swagger UI | `http://localhost:8000/docs` |
-| PostgreSQL | Local installation/configured development instance |
-
-### Clone
-
-```bash
-git clone https://github.com/Srijita-b02/foodys.git
-cd foodys
-```
-
-### Configure PostgreSQL
-
-Create a local database named `foodys`. Copy the safe template:
+From the project root:
 
 ```powershell
-Copy-Item backend/.env.example backend/.env
+cd backend
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-On Linux/macOS:
+Update `backend/.env` with your local values:
 
-```bash
-cp backend/.env.example backend/.env
-```
-
-Update `backend/.env` with local credentials. Never commit it.
-
-Example format:
-
-```dotenv
-DATABASE_URL=postgresql://username:password@localhost:5432/foodys
-SECRET_KEY=replace-with-a-long-random-development-secret
+```env
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/resqfood
+SECRET_KEY=replace_with_a_long_random_development_secret
 FRONTEND_ORIGIN=http://localhost:5173
 ```
 
-### Backend setup
+Never commit `.env`.
 
-```bash
-cd backend
-python -m venv venv
-```
-
-Activate it on Windows PowerShell:
+If the tables were not created using `schema.sql`, initialize missing tables with:
 
 ```powershell
-.\venv\Scripts\Activate.ps1
+python init_db.py
 ```
 
-Or on Linux/macOS:
+Start the backend:
 
-```bash
-source venv/bin/activate
-```
-
-Install dependencies and, once `main.py` exists, run the API:
-
-```bash
-pip install -r requirements.txt
+```powershell
 uvicorn main:app --reload
 ```
 
-### Frontend setup
+Backend: `http://localhost:8000`
+
+Swagger UI: `http://localhost:8000/docs`
+
+### 3. Start the frontend
 
 In another terminal:
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Useful frontend checks:
+Frontend: `http://localhost:5173`
 
-```bash
+## Tests
+
+Run backend tests from the `backend` folder with the virtual environment active:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Run frontend checks from the `frontend` folder:
+
+```powershell
 npm run lint
 npm run build
 ```
 
-## Seed and demo data
-
-Create repeatable `database/seed.sql` data after the schema is implemented. Minimum demo data:
+Tests should cover successful operations and important failures, especially:
 
-- one donor;
-- one NGO;
-- one volunteer;
-- two donations;
-- two food requests.
-
-Example local-only identities may use `donor@test.com`, `ngo@test.com`, and `volunteer@test.com`. Use fake credentials and store only password hashes, including in seed data.
-
-## Two-person DBMS work division
-
-Both members must be able to explain and demonstrate database work. The split reduces merge conflicts while preserving shared understanding.
-
-### Person A — users, authentication, and donations
-
-Primary ownership:
-
-- `users` schema, constraints, and model;
-- registration, password hashing, login, and user identity;
-- backend role-authorization foundation;
-- `donations` schema, constraints, model, and CRUD;
-- donor ownership checks;
-- donation expiry and filtering;
-- donor-facing pages;
-- aggregate statistics and related queries.
+- invalid login and role access;
+- invalid quantities and dates;
+- editing another user's record;
+- duplicate reservation attempts;
+- matching more than the remaining quantity;
+- invalid delivery transitions;
+- rollback when part of a transaction fails.
 
-DBMS topics demonstrated:
-
-- unique email and role constraints;
-- password-hash storage;
-- user-to-donation foreign key;
-- donation validation and indexes;
-- database-side filters;
-- aggregate queries.
-
-### Person B — requests, matching, and deliveries
+## Current development status
 
-Primary ownership:
-
-- `food_requests` schema, constraints, model, and CRUD;
-- `matches` and `deliveries` schemas and foreign keys;
-- NGO reservation transaction;
-- donor response transaction;
-- duplicate reservation protection;
-- volunteer acceptance concurrency protection;
-- delivery state machine and completion transaction;
-- delivery-history joins;
-- NGO and volunteer pages.
+Completed backend work includes:
 
-DBMS topics demonstrated:
+- registration and login with hashed passwords;
+- donor and NGO authorization;
+- donation CRUD and filtering;
+- food-request CRUD and filtering;
+- supply-first and demand-first matching;
+- partial quantity matching;
+- transactional match and delivery creation;
+- assigned NGO-member delivery access;
+- delivery state transitions and completion updates;
+- PostgreSQL constraints, foreign keys, indexes, and schema documentation;
+- backend automated tests.
 
-- multi-table relationships;
-- transactions, commit, and rollback;
-- conditional updates or locking;
-- state consistency;
-- joins and referential integrity.
-
-### Shared responsibilities
-
-Both members review:
-
-- schema changes and foreign-key effects;
-- API contracts used by both sides;
-- shared files such as `main.py`, `database.py`, and `App.jsx`;
-- integration and full workflow tests;
-- seed data, demo preparation, documentation, and final viva explanation.
-
-Ownership does not mean only one person understands a table. Each member should be able to explain the five-table model and both matching workflows.
-
-## Recommended implementation order
-
-1. Agree on schema and status values.
-2. Create `schema.sql`, constraints, foreign keys, and indexes.
-3. Create SQLAlchemy models and database connection handling.
-4. Implement users, registration, login, hashing, and backend authorization.
-5. Implement donation CRUD, validation, filtering, and expiry.
-6. Implement food-request CRUD, validation, filtering, and expiry.
-7. Implement the NGO reservation transaction and duplicate-reservation test.
-8. Implement the donor-response transaction.
-9. Implement delivery creation, volunteer acceptance, and the state machine.
-10. Implement completion updates, joins, and aggregate queries.
-11. Connect the React pages only to tested backend APIs.
-12. Add seed data, complete workflow tests, UI cleanup, and demo preparation.
-
-For a schema change, update all affected layers together:
-
-```text
-schema.sql
-SQLAlchemy model
-Pydantic schemas
-routes/services
-seed.sql
-tests
-frontend assumptions
-```
-
-## Git collaboration workflow
-
-The first commit should contain the safe repository scaffold and documentation. Do not commit `venv`, `node_modules`, build output, `.env`, credentials, keys, local databases, or editor files.
-
-Recommended branches:
-
-```text
-main
-  └── development
-        ├── person-a/auth
-        ├── person-a/donations
-        ├── person-b/requests
-        ├── person-b/matching
-        └── person-b/deliveries
-```
-
-Typical workflow:
+The React pages and styling exist, but several screens still contain temporary sample data. Connecting the frontend to the FastAPI endpoints is the main remaining task.
 
-```bash
-git switch development
-git pull
-git switch -c person-a/donations
-```
+## Two-person work division
 
-Before merging, pull the latest shared branch, resolve conflicts carefully, run relevant tests, and review the staged files. Merge feature branches into `development`; merge tested milestones into `main`.
+### Person A
 
-Use focused commit messages such as:
+- users and authentication;
+- donations and donor workflow;
+- donation filtering and expiry;
+- aggregate statistics.
 
-```text
-Initialize foodys project structure
-Add user and donation database models
-Implement NGO food request endpoints
-Prevent duplicate donation reservations
-Implement volunteer delivery state flow
-```
+### Person B
 
-Avoid vague messages such as `update`, `stuff`, `fix`, or `final`.
+- food requests;
+- matching and reservation transactions;
+- deliveries and NGO-member pickup workflow;
+- concurrency protection and JOIN queries.
 
-Before every commit:
-
-```bash
-git status
-git diff --staged
-```
+Both members should understand the full database design and be able to explain the main transaction, constraints, and relationships during the demonstration.
 
-Check that no `.env`, credential, generated dependency directory, or unrelated file is staged.
+## DBMS concepts demonstrated
 
-## Testing requirements
+- primary and foreign keys;
+- `NOT NULL`, `UNIQUE`, and `CHECK` constraints;
+- referential integrity;
+- useful indexes;
+- multi-table JOINs;
+- aggregate queries;
+- ACID transactions;
+- commit and rollback;
+- row locking and concurrency-safe reservations;
+- database-side filtering;
+- consistent delivery states;
+- role-based data access.
 
-Every core flow needs a success case and an obvious failure case. At minimum test:
+## Security scope
 
-| Scenario | Expected result |
-|---|---|
-| Register unique valid user | User created with hashed password |
-| Register duplicate email | Rejected |
-| Register invalid role | Rejected |
-| Create donation with `quantity <= 0` | Rejected |
-| Create donation with invalid donor reference/role | Rejected |
-| Create request with invalid NGO reference/role | Rejected |
-| Create request with past deadline | Rejected |
-| Reserve available donation | Donation updated, match and delivery created |
-| Reserve expired donation | Rejected |
-| Reserve same donation twice | Exactly one reservation succeeds |
-| Donor answers open request | Donation/request matched and delivery created |
-| Two volunteers accept one delivery | Exactly one acceptance succeeds |
-| Apply invalid delivery transition | Rejected |
-| Complete valid delivery sequence | Delivery, match, donation, and optional request updated |
-| Access route with wrong role | `403 Forbidden` |
-| Access another user's owned record | Rejected |
+This is an academic MVP. It includes the required basics:
 
-Test backend endpoints in Swagger before using frontend behavior to diagnose them. For transaction tests, verify both the expected records and the absence of partial writes after failure.
+- password hashing;
+- no password hashes in API responses;
+- secrets stored in `.env`;
+- backend role and ownership checks;
+- SQLAlchemy or parameterized SQL;
+- only necessary user information.
 
-## Demo checklist
+OAuth, MFA, email verification, CAPTCHA, payment processing, GPS tracking, and complex production infrastructure are outside the MVP scope.
 
-Before the evaluation:
+## Expected outcome
 
-1. Use a known local database and load repeatable seed data.
-2. Start PostgreSQL, FastAPI, and React.
-3. Verify Swagger at `http://localhost:8000/docs`.
-4. Log in once as donor, NGO, and volunteer.
-5. Run the supply-first workflow from creation through delivery.
-6. Demonstrate that a second reservation is rejected.
-7. Run or explain the demand-first workflow.
-8. Show a meaningful multi-table delivery-history join.
-9. Show constraints, indexes, foreign keys, and an aggregate query.
-10. Keep backup demo records and avoid relying on live external services.
+The completed application should demonstrate an end-to-end flow in which a donor posts food or answers a request, an NGO member accepts responsibility for the food, and the database reliably records matching, pickup, transport, and delivery.
 
-## Impact measurement
-
-Do not invent impact values. Calculate metrics from database data, such as:
-
-- total donations;
-- completed donations;
-- quantity of food delivered;
-- fulfilled and unmet requests;
-- successful deliveries;
-- completed deliveries per volunteer;
-- active donors, NGOs, and volunteers;
-- donation completion rate;
-- delivery completion rate.
-
-Example redistribution rate:
-
-```text
-delivered donations / total donations × 100
-```
-
-### SDG 2 — Zero Hunger
-
-foodys supports SDG 2 by improving the coordination required to move existing surplus food to NGOs and recipient organizations:
-
-```text
-AVAILABLE FOOD → MATCHING → DELIVERY → RECIPIENT ORGANIZATION
-```
-
-The software coordinates redistribution; it must not claim unmeasured reductions in hunger.
-
-### SDG 12 — Responsible Consumption and Production
-
-foodys supports SDG 12 by offering a redistribution path for usable surplus that might otherwise be discarded:
-
-```text
-SURPLUS FOOD → MATCHING → REDISTRIBUTION
-```
-
-## Out of scope for the MVP
-
-Do not prioritize:
-
-- GPS, maps, or live volunteer tracking;
-- route optimization;
-- OAuth, MFA, email verification, CAPTCHA, or NGO verification;
-- SMS, push notifications, or chat;
-- payments;
-- AI matching;
-- QR or OTP delivery verification;
-- advanced admin dashboards;
-- a mobile application;
-- complex cloud infrastructure.
-
-Possible future enhancements include latitude/longitude matching, OpenStreetMap/Leaflet, automatic matching suggestions, multilingual support, notification services, QR confirmation, and richer impact analytics. They should be considered only after the local MVP is reliable.
-
-## Deployment principle
-
-Localhost functionality comes first. Deployment begins only after the database, API, frontend integration, security baseline, and complete workflows work locally.
-
-Before deployment, confirm:
-
-- environment variables are documented;
-- secrets are absent from Git;
-- CORS uses a configurable frontend origin;
-- the frontend API base URL is configurable;
-- no API URL is duplicated across components;
-- schema/seed or migration instructions are repeatable;
-- production credentials differ from local credentials.
-
-Deployment must not require redesigning the application.
-
-## Definition of done
-
-A feature is complete only when:
-
-- its database impact is implemented and documented;
-- relevant constraints and relationships remain valid;
-- the FastAPI endpoint works;
-- validation, authentication, role, and ownership checks work;
-- the frontend uses the real endpoint when applicable;
-- a success case and failure case pass;
-- related workflows remain functional;
-- no secret or unrelated generated file is included.
-
-The MVP is complete when donor, NGO, and volunteer login works; both matching directions work; matches and deliveries are created consistently; volunteers can complete only valid transitions; duplicate reservation and acceptance are prevented; completed delivery updates all related records; joins and aggregates demonstrate the relational model; and the full workflow can be demonstrated end to end.
-
-## Project reference files
-
-- `README.md`: product scope, architecture, data model, setup, testing, collaboration, and demo reference.
-- `.env.example`: safe configuration names and placeholders; never place real secrets in it.
-
-## Final principle
-
-foodys should remain:
-
-```text
-small enough to finish
-simple enough to explain
-database-heavy enough to demonstrate DBMS
-complete enough to demo end to end
-```
-
-When choosing between a complicated solution and a straightforward relational solution, choose the straightforward relational solution.
+Useful impact values should be calculated from database records rather than invented. Examples include completed donations, quantity delivered, fulfilled requests, successful deliveries, active donors, and active NGO members.

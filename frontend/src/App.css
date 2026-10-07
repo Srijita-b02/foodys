@@ -190,6 +190,12 @@ select:focus {
   transform: translateY(-1px);
 }
 
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+  transform: none;
+}
+
 .role-option:focus-visible,
 .primary-button:focus-visible,
 .auth-switch button:focus-visible {
@@ -662,4 +668,113 @@ select:focus {
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.form-error {
+  border-left-color: #a33c49;
+  color: #752c37;
+  background: #ead4d8;
+}
+
+.form-success {
+  border-left-color: #41714c;
+  color: #315c3b;
+  background: #dce9de;
+}
+
+.session-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #fffafc;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.orange-button:disabled,
+.danger-button:disabled,
+.outline-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.danger-button {
+  padding: 7px 11px;
+  border: 1px solid #b94a55;
+  border-radius: 7px;
+  color: #963641;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondary-button {
+  padding: 10px 15px;
+  border: 1px solid #c8bbae;
+  border-radius: 7px;
+  color: #665e56;
+  background: #fffdf9;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.compact-button {
+  padding: 7px 11px;
+  font-size: 11px;
+}
+
+.form-actions {
+  display: flex !important;
+  grid-template-columns: none !important;
+  flex-direction: row;
+  gap: 10px !important;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.empty-state {
+  margin: 0;
+  padding: 28px 22px;
+  color: #81776d;
+  font-size: 13px;
+}
+
+.page-message {
+  margin: 0 0 20px;
+}
+
+.status-matched,
+.status-assigned,
+.status-picked-up {
+  color: #6d5525;
+  background: #f3e8cc;
+}
+
+.status-cancelled,
+.status-expired {
+  color: #765f64;
+  background: #e8e0e2;
+}
+
+.status-open {
+  color: #41714c;
+  background: #e6f0e5;
+}
+
+.status-fulfilled {
+  color: #496c55;
+  background: #e2eee5;
 }

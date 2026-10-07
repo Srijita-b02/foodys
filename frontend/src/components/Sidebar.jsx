@@ -11,6 +11,7 @@ function Sidebar({ role, activePage, onNavigate, onLogout }) {
     ['dashboard', 'Overview'],
     ['request', 'New request'],
     ['my-requests', 'My requests'],
+    ['requests', 'Open requests'],
     ['available', 'Available food'],
     ['deliveries', 'Deliveries'],
   ]

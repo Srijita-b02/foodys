@@ -1,12 +1,42 @@
 import { useState } from 'react'
 import RoleSelector from '../components/RoleSelector'
+import { apiRequest } from '../api'
 
-function Register({ role, onRoleChange, onLogin }) {
+function Register({ role, onRoleChange, onLogin, onRegistered }) {
   const [message, setMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    setMessage(`Mock ${role} registration submitted. No account was created.`)
+    setMessage('')
+    setIsSubmitting(true)
+
+    const form = new FormData(event.currentTarget)
+    const isDonor = role === 'Donor'
+
+    try {
+      await apiRequest('/auth/register', {
+        method: 'POST',
+        body: {
+          name: form.get(isDonor ? 'name' : 'memberName').trim(),
+          organization_name: isDonor
+            ? null
+            : form.get('organizationName').trim(),
+          email: form.get('email').trim(),
+          password: form.get('password'),
+          phone: form.get('phone').trim(),
+          role: role.toLowerCase(),
+          donor_type: isDonor ? form.get('donorType') : null,
+          location: form.get('location').trim(),
+        },
+      })
+
+      onRegistered()
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   function changeRole(nextRole) {
@@ -20,8 +50,8 @@ function Register({ role, onRoleChange, onLogin }) {
         <p className="eyebrow">JOIN THE NETWORK</p>
         <h1>Start with the right role.</h1>
         <p>
-          Donors share available food. NGO members and volunteers coordinate
-          requests and pickup with equal access.
+          Donors share available food. NGO members coordinate requests,
+          pickup and delivery.
         </p>
         <div className="role-summary">
           <span>Clear roles</span>
@@ -52,9 +82,9 @@ function Register({ role, onRoleChange, onLogin }) {
               />
 
               <label htmlFor="donor-type">Donor type</label>
-              <select id="donor-type" name="donorType" defaultValue="Individual">
-                <option>Individual</option>
-                <option>Restaurant</option>
+              <select id="donor-type" name="donorType" defaultValue="individual">
+                <option value="individual">Individual</option>
+                <option value="restaurant">Restaurant</option>
               </select>
             </>
           ) : (
@@ -62,7 +92,7 @@ function Register({ role, onRoleChange, onLogin }) {
               <label htmlFor="ngo-name">NGO name</label>
               <input
                 id="ngo-name"
-                name="ngoName"
+                name="organizationName"
                 type="text"
                 placeholder="Organization name"
                 autoComplete="organization"
@@ -122,12 +152,20 @@ function Register({ role, onRoleChange, onLogin }) {
             required
           />
 
-          <button className="primary-button" type="submit">
-            Register as {role}
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Creating account...' : `Register as ${role}`}
           </button>
         </form>
 
-        {message && <p className="form-message">{message}</p>}
+        {message && (
+          <p className="form-message form-error" role="alert">
+            {message}
+          </p>
+        )}
 
         <p className="auth-switch">
           Already registered?{' '}

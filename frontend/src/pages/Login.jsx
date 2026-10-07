@@ -1,13 +1,39 @@
 import { useState } from 'react'
 import RoleSelector from '../components/RoleSelector'
+import { apiRequest } from '../api'
 
-function Login({ role, onRoleChange, onRegister, onLogin }) {
+function Login({ role, onRoleChange, onRegister, onLogin, notice }) {
   const [message, setMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    onLogin()
-    // setMessage(`Mock ${role} login submitted. No account was accessed.`)
+    setMessage('')
+    setIsSubmitting(true)
+
+    const form = new FormData(event.currentTarget)
+
+    try {
+      const response = await apiRequest('/auth/login', {
+        method: 'POST',
+        body: {
+          email: form.get('email').trim(),
+          password: form.get('password'),
+          role: role.toLowerCase(),
+        },
+      })
+
+      onLogin(response)
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  function changeRole(nextRole) {
+    setMessage('')
+    onRoleChange(nextRole)
   }
 
   return (
@@ -32,7 +58,7 @@ function Login({ role, onRoleChange, onRegister, onLogin }) {
           <p>Choose your role and sign in.</p>
         </div>
 
-        <RoleSelector value={role} onChange={onRoleChange} />
+        <RoleSelector value={role} onChange={changeRole} />
 
         <form onSubmit={handleSubmit}>
           <label htmlFor="email">Email</label>
@@ -55,12 +81,26 @@ function Login({ role, onRoleChange, onRegister, onLogin }) {
             required
           />
 
-          <button className="primary-button" type="submit">
-            Sign in as {role}
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Signing in...' : `Sign in as ${role}`}
           </button>
         </form>
 
-        {message && <p className="form-message">{message}</p>}
+        {notice && (
+          <p className="form-message form-success" role="status">
+            {notice}
+          </p>
+        )}
+
+        {message && (
+          <p className="form-message form-error" role="alert">
+            {message}
+          </p>
+        )}
 
         <p className="auth-switch">
           Need an account?{' '}

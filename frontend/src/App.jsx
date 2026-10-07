@@ -141,9 +141,6 @@ function App() {
         case 'requests':
           return <BrowseRequests token={token} canRespond />
 
-        case 'deliveries':
-          return <Deliveries />
-
         default:
           return <DonorDashboard token={token} onNavigate={setCurrentPage} />
       }
@@ -185,7 +182,7 @@ function App() {
         return <AvailableFood token={token} />
 
       case 'deliveries':
-        return <Deliveries />
+        return <Deliveries token={token} />
 
       default:
         return (

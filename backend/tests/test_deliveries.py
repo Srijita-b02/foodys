@@ -15,6 +15,7 @@ from models.match import Match
 from models.user import User
 from routers.deliveries import (
     get_deliveries,
+    list_my_delivery_details,
     list_my_deliveries,
     update_deliveries_status,
 )
@@ -172,6 +173,24 @@ class DeliveriesTests(unittest.TestCase):
 
         results = list_my_deliveries(self.db, self.ngo)
         self.assertEqual([item.id for item in results], [deliveries.id])
+
+    def test_delivery_details_use_multi_table_join(self):
+        donation, match, deliveries = self.create_match_and_deliveries(
+            allocated_quantity=25,
+        )
+
+        results = list_my_delivery_details(self.db, self.ngo)
+
+        self.assertEqual(len(results), 1)
+        details = results[0]
+        self.assertEqual(details.id, deliveries.id)
+        self.assertEqual(details.match_id, match.id)
+        self.assertEqual(details.donation_id, donation.id)
+        self.assertEqual(details.food_name, donation.food_name)
+        self.assertEqual(details.allocated_quantity, 25)
+        self.assertEqual(details.donor_name, self.donor.name)
+        self.assertEqual(details.organization_name, self.ngo.organization_name)
+        self.assertEqual(details.destination_location, self.ngo.location)
 
     def test_unrelated_ngo_cannot_update_deliveries(self):
         _, _, deliveries = self.create_match_and_deliveries()

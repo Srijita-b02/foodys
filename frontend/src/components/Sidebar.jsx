@@ -4,7 +4,6 @@ function Sidebar({ role, activePage, onNavigate, onLogout }) {
     ['donate', 'New donation'],
     ['donations', 'My donations'],
     ['requests', 'Food requests'],
-    ['deliveries', 'Deliveries'],
   ]
 
   const ngoItems = [

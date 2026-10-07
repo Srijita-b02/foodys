@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.database import Base
@@ -8,6 +8,21 @@ from database.database import Base
 
 class Donation(Base):
     __tablename__ = "donations"
+    __table_args__ = (
+        CheckConstraint(
+            "quantity > 0",
+            name="ck_donations_quantity_positive",
+        ),
+        CheckConstraint(
+            "expiry_time > prepared_at",
+            name="ck_donations_expiry_after_prepared",
+        ),
+        CheckConstraint(
+            "status IN ('available', 'reserved', 'matched', 'picked_up', "
+            "'assigned', 'in_transit', 'delivered', 'cancelled', 'expired')",
+            name="ck_donations_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         primary_key=True,
@@ -33,6 +48,7 @@ class Donation(Base):
     category: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
+        index=True,
     )
 
     quantity: Mapped[int] = mapped_column(
@@ -59,6 +75,7 @@ class Donation(Base):
     pickup_address: Mapped[str] = mapped_column(
         String(500),
         nullable=False,
+        index=True,
     )
 
     status: Mapped[str] = mapped_column(
@@ -83,5 +100,5 @@ class Donation(Base):
 
     donor = relationship(
         "User",
-        backref="donations",
+        back_populates="donations",
     )

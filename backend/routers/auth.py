@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database.database import get_db
 from models.user import User
-from schemas.user import UserLogin, UserRegister, UserResponse
-from utils.auth import create_access_token
+from schemas.user import LoginResponse, UserLogin, UserRegister, UserResponse
+from utils.auth import create_access_token, get_current_user
 from utils.security import hash_password, verify_password
 
 
@@ -36,6 +37,7 @@ def register(
 
     new_user = User(
         name=user_data.name,
+        organization_name=user_data.organization_name,
         email=user_data.email,
         password_hash=hash_password(user_data.password),
         phone=user_data.phone,
@@ -45,17 +47,25 @@ def register(
             if user_data.donor_type
             else None
         ),
-        address=user_data.address,
+        location=user_data.location,
     )
 
     db.add(new_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email is already registered.",
+        ) from exc
+
     db.refresh(new_user)
 
     return new_user
 
 
-@router.post("/login")
+@router.post("/login", response_model=LoginResponse)
 def login(
     login_data: UserLogin,
     db: Session = Depends(get_db),
@@ -94,9 +104,20 @@ def login(
         "user": {
             "id": user.id,
             "name": user.name,
+            "organization_name": user.organization_name,
             "email": user.email,
+            "phone": user.phone,
             "role": user.role,
             "donor_type": user.donor_type,
-            "ngo_id": user.ngo_id,
+            "location": user.location,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
         },
     }
+
+
+@router.get("/me", response_model=UserResponse)
+def get_me(
+    current_user: User = Depends(get_current_user),
+):
+    return current_user

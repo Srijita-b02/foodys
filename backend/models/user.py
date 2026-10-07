@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import CheckConstraint, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.database import Base
@@ -8,6 +8,23 @@ from database.database import Base
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('donor', 'ngo')",
+            name="ck_users_role",
+        ),
+        CheckConstraint(
+            "donor_type IS NULL OR donor_type IN ('individual', 'restaurant')",
+            name="ck_users_donor_type",
+        ),
+        CheckConstraint(
+            "(role = 'donor' AND donor_type IS NOT NULL "
+            "AND organization_name IS NULL) OR "
+            "(role = 'ngo' AND donor_type IS NULL "
+            "AND organization_name IS NOT NULL)",
+            name="ck_users_role_fields",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         primary_key=True,
@@ -31,9 +48,9 @@ class User(Base):
         nullable=False,
     )
 
-    phone: Mapped[str | None] = mapped_column(
+    phone: Mapped[str] = mapped_column(
         String(20),
-        nullable=True,
+        nullable=False,
     )
 
     role: Mapped[str] = mapped_column(
@@ -50,17 +67,15 @@ class User(Base):
         nullable=True,
     )
 
-    # Used only when role = "volunteer".
-    # Points to the NGO that the volunteer belongs to.
-    ngo_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"),
+    # Used only when role = "ngo". The name field stores the member name.
+    organization_name: Mapped[str | None] = mapped_column(
+        String(150),
         nullable=True,
-        index=True,
     )
 
-    address: Mapped[str | None] = mapped_column(
+    location: Mapped[str] = mapped_column(
         String(500),
-        nullable=True,
+        nullable=False,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -80,19 +95,4 @@ class User(Base):
     donations = relationship(
         "Donation",
         back_populates="donor",
-    )
-
-    # NGO -> volunteers
-    volunteers = relationship(
-        "User",
-        back_populates="ngo",
-        foreign_keys=[ngo_id],
-    )
-
-    # Volunteer -> NGO
-    ngo = relationship(
-        "User",
-        back_populates="volunteers",
-        remote_side=[id],
-        foreign_keys=[ngo_id],
     )

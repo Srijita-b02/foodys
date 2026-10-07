@@ -1,0 +1,186 @@
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select, update
+from sqlalchemy.orm import Session
+
+from database.database import get_db
+from models.donation import Donation
+from models.user import User
+from schemas.donation import DonationCreate, DonationResponse, DonationUpdate
+from utils.auth import get_current_user, require_roles
+
+
+router = APIRouter(
+    prefix="/donations",
+    tags=["Donations"],
+)
+
+
+def expire_available_donations(db: Session) -> None:
+    """Mark currently available donations as expired when their time passes."""
+
+    result = db.execute(
+        update(Donation)
+        .where(
+            Donation.status == "available",
+            Donation.expiry_time <= datetime.now(timezone.utc),
+        )
+        .values(status="expired", updated_at=datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+
+    if result.rowcount:
+        db.commit()
+
+
+def get_donation_or_404(donation_id: int, db: Session) -> Donation:
+    donation = db.get(Donation, donation_id)
+
+    if donation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Donation does not exist.",
+        )
+
+    return donation
+
+
+@router.post(
+    "",
+    response_model=DonationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_donation(
+    donation_data: DonationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("donor")),
+):
+    donation = Donation(
+        donor_id=current_user.id,
+        **donation_data.model_dump(),
+        status="available",
+    )
+
+    db.add(donation)
+    db.commit()
+    db.refresh(donation)
+
+    return donation
+
+
+@router.get("", response_model=list[DonationResponse])
+def list_donations(
+    category: str | None = None,
+    pickup_address: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    del current_user
+    expire_available_donations(db)
+
+    query = select(Donation).where(Donation.status == "available")
+
+    if category:
+        query = query.where(Donation.category == category)
+
+    if pickup_address:
+        query = query.where(Donation.pickup_address == pickup_address)
+
+    return db.scalars(query.order_by(Donation.expiry_time)).all()
+
+
+@router.get("/my", response_model=list[DonationResponse])
+def list_my_donations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("donor")),
+):
+    expire_available_donations(db)
+
+    query = (
+        select(Donation)
+        .where(Donation.donor_id == current_user.id)
+        .order_by(Donation.created_at.desc())
+    )
+
+    return db.scalars(query).all()
+
+
+@router.get("/{donation_id}", response_model=DonationResponse)
+def get_donation(
+    donation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    del current_user
+    expire_available_donations(db)
+    return get_donation_or_404(donation_id, db)
+
+
+@router.put("/{donation_id}", response_model=DonationResponse)
+def update_donation(
+    donation_id: int,
+    donation_data: DonationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("donor")),
+):
+    expire_available_donations(db)
+    donation = get_donation_or_404(donation_id, db)
+
+    if donation.donor_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can update only your own donations.",
+        )
+
+    if donation.status != "available":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only available donations can be updated.",
+        )
+
+    updates = donation_data.model_dump(exclude_unset=True)
+    prepared_at = updates.get("prepared_at", donation.prepared_at)
+    expiry_time = updates.get("expiry_time", donation.expiry_time)
+
+    if expiry_time <= prepared_at:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Expiry time must be later than preparation time.",
+        )
+
+    for field, value in updates.items():
+        setattr(donation, field, value)
+
+    db.commit()
+    db.refresh(donation)
+
+    return donation
+
+
+@router.delete("/{donation_id}", response_model=DonationResponse)
+def cancel_donation(
+    donation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("donor")),
+):
+    expire_available_donations(db)
+    donation = get_donation_or_404(donation_id, db)
+
+    if donation.donor_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can cancel only your own donations.",
+        )
+
+    if donation.status != "available":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only available donations can be cancelled.",
+        )
+
+    donation.status = "cancelled"
+    db.commit()
+    db.refresh(donation)
+
+    return donation

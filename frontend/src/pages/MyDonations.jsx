@@ -98,7 +98,8 @@ function MyDonations({ token, onNavigate, onEdit }) {
             <div>
               <strong>{donation.food_name}</strong>
               <p>
-                {donation.quantity} {donation.unit} · Expires{' '}
+                {donation.remaining_quantity ?? donation.quantity} of{' '}
+                {donation.quantity} {donation.unit} remaining · Expires{' '}
                 {formatDate(donation.expiry_time)}
               </p>
             </div>

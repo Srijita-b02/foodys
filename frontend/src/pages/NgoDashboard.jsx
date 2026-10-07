@@ -107,7 +107,9 @@ function NgoDashboard({ token, onNavigate }) {
             <div>
               <strong>{foodRequest.food_name}</strong>
               <p>
-                {foodRequest.quantity} {foodRequest.unit} · Needed before{' '}
+                {foodRequest.remaining_quantity ?? foodRequest.quantity} of{' '}
+                {foodRequest.quantity} {foodRequest.unit} still needed ·{' '}
+                Needed before{' '}
                 {formatDate(foodRequest.needed_before)}
               </p>
             </div>

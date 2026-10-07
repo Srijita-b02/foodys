@@ -63,6 +63,7 @@ class FoodRequestResponse(BaseModel):
     food_name: str
     category: str
     quantity: int
+    remaining_quantity: int | None = Field(default=None, ge=0)
     unit: str
     description: str | None
     location: str

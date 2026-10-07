@@ -181,6 +181,15 @@ def respond_to_request(
                 detail="Food request is no longer open.",
             )
 
+        if donation.unit.strip().casefold() != food_request.unit.strip().casefold():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Donation unit must match the food request unit before "
+                    "quantities can be allocated."
+                ),
+            )
+
         request_allocated = _allocated_for_request(db, food_request.id)
         request_remaining = food_request.quantity - request_allocated
 

@@ -19,7 +19,9 @@ from models.food_request import FoodRequest
 from models.match import Match
 from models.user import User
 from schemas.match import DirectReservationCreate, RequestMatchCreate
+from routers.donations import list_donations
 from routers.matches import reserve_donation, respond_to_request
+from routers.requests import list_open_requests
 
 
 class MatchModelTests(unittest.TestCase):
@@ -231,6 +233,25 @@ class MatchModelTests(unittest.TestCase):
         self.assertEqual(self.db.query(Match).count(), 0)
         self.assertEqual(self.db.query(Deliveries).count(), 0)
 
+    def test_partial_reservation_reports_remaining_donation_quantity(self):
+        reserve_donation(
+            DirectReservationCreate(
+                donation_id=self.donation.id,
+                allocated_quantity=25,
+            ),
+            self.db,
+            self.ngo_member,
+        )
+
+        results = list_donations(
+            category=None,
+            pickup_address=None,
+            db=self.db,
+            current_user=self.ngo_member,
+        )
+
+        self.assertEqual(results[0].remaining_quantity, 75)
+
     def test_donor_response_creates_match_for_request_owner(self):
         match = respond_to_request(
             RequestMatchCreate(
@@ -249,6 +270,45 @@ class MatchModelTests(unittest.TestCase):
         self.assertEqual(match.ngo_id, self.food_request.ngo_id)
         self.assertEqual(delivery.assigned_ngo_member_id, self.food_request.ngo_id)
         self.assertEqual(self.food_request.status, "matched")
+
+    def test_partial_response_reports_remaining_request_quantity(self):
+        respond_to_request(
+            RequestMatchCreate(
+                donation_id=self.donation.id,
+                request_id=self.food_request.id,
+                allocated_quantity=20,
+            ),
+            self.db,
+            self.donor,
+        )
+
+        results = list_open_requests(
+            category=None,
+            location=None,
+            db=self.db,
+            current_user=self.donor,
+        )
+
+        self.assertEqual(results[0].remaining_quantity, 50)
+
+    def test_donor_response_rejects_mismatched_units(self):
+        self.food_request.unit = "packets"
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as context:
+            respond_to_request(
+                RequestMatchCreate(
+                    donation_id=self.donation.id,
+                    request_id=self.food_request.id,
+                    allocated_quantity=10,
+                ),
+                self.db,
+                self.donor,
+            )
+
+        self.assertEqual(context.exception.status_code, 409)
+        self.assertEqual(self.db.query(Match).count(), 0)
+        self.assertEqual(self.db.query(Deliveries).count(), 0)
 
     def test_donor_cannot_match_another_donors_donation(self):
         other_donor = User(

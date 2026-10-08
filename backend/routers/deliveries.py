@@ -306,6 +306,11 @@ def update_deliveries_status(
 
         match.status = "completed"
 
+        # Production sessions disable autoflush. Persist the pending delivery
+        # and match states before the aggregate queries recalculate related
+        # donation and request statuses.
+        db.flush()
+
         donation = db.scalar(
             select(Donation)
             .where(Donation.id == match.donation_id)

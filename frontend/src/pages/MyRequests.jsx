@@ -1,30 +1,137 @@
+import { useEffect, useState } from 'react'
 import PageHeader from '../components/PageHeader'
 import StatusBadge from '../components/StatusBadge'
+import { apiRequest } from '../api'
 
-function MyRequests() {
+function formatDate(value) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function MyRequests({ token, onNavigate, onEdit }) {
+  const [requests, setRequests] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [cancellingId, setCancellingId] = useState(null)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    let ignore = false
+
+    apiRequest('/requests/my', { token })
+      .then((data) => {
+        if (!ignore) {
+          setRequests(data)
+        }
+      })
+      .catch((error) => {
+        if (!ignore) {
+          setMessage(error.message)
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [token])
+
+  async function cancelRequest(foodRequest) {
+    const confirmed = window.confirm(
+      `Cancel the request "${foodRequest.food_name}"?`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setMessage('')
+    setCancellingId(foodRequest.id)
+
+    try {
+      const cancelled = await apiRequest(`/requests/${foodRequest.id}`, {
+        method: 'DELETE',
+        token,
+      })
+
+      setRequests((current) =>
+        current.map((item) => (item.id === cancelled.id ? cancelled : item)),
+      )
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setCancellingId(null)
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="My requests"
-        description="Track food requests made by your organization."
+        description="Manage your current and previous food requests."
+        action={() => onNavigate('request')}
+        actionLabel="New request"
       />
 
-      <section className="content-card">
-        <div className="list-row">
-          <div>
-            <strong>Meals for 25 people</strong>
-            <p>Required today · 7:00 PM</p>
-          </div>
-          <StatusBadge status="Available" />
-        </div>
+      {message && (
+        <p className="form-message form-error page-message" role="alert">
+          {message}
+        </p>
+      )}
 
-        <div className="list-row">
-          <div>
-            <strong>15 packed meals</strong>
-            <p>Required tomorrow · 12:00 PM</p>
+      <section className="content-card">
+        {isLoading && <p className="empty-state">Loading requests...</p>}
+
+        {!isLoading && requests.length === 0 && (
+          <p className="empty-state">You have not created any requests yet.</p>
+        )}
+
+        {requests.map((foodRequest) => (
+          <div className="list-row" key={foodRequest.id}>
+            <div>
+              <strong>{foodRequest.food_name}</strong>
+              <p>
+                {foodRequest.remaining_quantity ?? foodRequest.quantity} of{' '}
+                {foodRequest.quantity} {foodRequest.unit} still needed ·{' '}
+                Needed before{' '}
+                {formatDate(foodRequest.needed_before)}
+              </p>
+            </div>
+
+            <div className="row-actions">
+              <StatusBadge status={foodRequest.status} />
+
+              {foodRequest.status === 'open' && (
+                <>
+                  <button
+                    className="secondary-button compact-button"
+                    type="button"
+                    disabled={cancellingId === foodRequest.id}
+                    onClick={() => onEdit(foodRequest.id)}
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    className="danger-button"
+                    type="button"
+                    disabled={cancellingId === foodRequest.id}
+                    onClick={() => cancelRequest(foodRequest)}
+                  >
+                    {cancellingId === foodRequest.id
+                      ? 'Cancelling...'
+                      : 'Cancel'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <StatusBadge status="Reserved" />
-        </div>
+        ))}
       </section>
     </>
   )

@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from database.database import get_db
 from models.donation import Donation
+from models.match import Match
 from models.user import User
 from schemas.donation import DonationCreate, DonationResponse, DonationUpdate
 from utils.auth import get_current_user, require_roles
@@ -15,6 +16,19 @@ router = APIRouter(
     prefix="/donations",
     tags=["Donations"],
 )
+
+
+def attach_remaining_quantity(donation: Donation, db: Session) -> Donation:
+    """Attach the quantity not yet allocated by non-cancelled matches."""
+
+    allocated = db.scalar(
+        select(func.coalesce(func.sum(Match.allocated_quantity), 0)).where(
+            Match.donation_id == donation.id,
+            Match.status != "cancelled",
+        )
+    ) or 0
+    donation.remaining_quantity = max(donation.quantity - allocated, 0)
+    return donation
 
 
 def expire_available_donations(db: Session) -> None:
@@ -66,7 +80,7 @@ def create_donation(
     db.commit()
     db.refresh(donation)
 
-    return donation
+    return attach_remaining_quantity(donation, db)
 
 
 @router.get("", response_model=list[DonationResponse])
@@ -87,7 +101,8 @@ def list_donations(
     if pickup_address:
         query = query.where(Donation.pickup_address == pickup_address)
 
-    return db.scalars(query.order_by(Donation.expiry_time)).all()
+    donations = db.scalars(query.order_by(Donation.expiry_time)).all()
+    return [attach_remaining_quantity(donation, db) for donation in donations]
 
 
 @router.get("/my", response_model=list[DonationResponse])
@@ -103,7 +118,8 @@ def list_my_donations(
         .order_by(Donation.created_at.desc())
     )
 
-    return db.scalars(query).all()
+    donations = db.scalars(query).all()
+    return [attach_remaining_quantity(donation, db) for donation in donations]
 
 
 @router.get("/{donation_id}", response_model=DonationResponse)
@@ -114,7 +130,8 @@ def get_donation(
 ):
     del current_user
     expire_available_donations(db)
-    return get_donation_or_404(donation_id, db)
+    donation = get_donation_or_404(donation_id, db)
+    return attach_remaining_quantity(donation, db)
 
 
 @router.put("/{donation_id}", response_model=DonationResponse)
@@ -155,7 +172,7 @@ def update_donation(
     db.commit()
     db.refresh(donation)
 
-    return donation
+    return attach_remaining_quantity(donation, db)
 
 
 @router.delete("/{donation_id}", response_model=DonationResponse)
@@ -183,4 +200,4 @@ def cancel_donation(
     db.commit()
     db.refresh(donation)
 
-    return donation
+    return attach_remaining_quantity(donation, db)

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 import os
 import unittest
 
+from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
@@ -12,11 +13,15 @@ os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-matching-tests")
 
 from database.database import Base
+from models.deliveries import Deliveries
 from models.donation import Donation
 from models.food_request import FoodRequest
 from models.match import Match
 from models.user import User
 from schemas.match import DirectReservationCreate, RequestMatchCreate
+from routers.donations import list_donations
+from routers.matches import reserve_donation, respond_to_request
+from routers.requests import list_open_requests
 
 
 class MatchModelTests(unittest.TestCase):
@@ -181,6 +186,157 @@ class MatchModelTests(unittest.TestCase):
                 request_id=self.food_request.id,
                 allocated_quantity=0,
             )
+
+    def test_ngo_reservation_creates_match_and_assigned_delivery(self):
+        match = reserve_donation(
+            DirectReservationCreate(
+                donation_id=self.donation.id,
+                allocated_quantity=25,
+            ),
+            self.db,
+            self.ngo_member,
+        )
+
+        delivery = self.db.query(Deliveries).filter_by(match_id=match.id).one()
+
+        self.assertIsNone(match.request_id)
+        self.assertEqual(match.ngo_id, self.ngo_member.id)
+        self.assertEqual(delivery.assigned_ngo_member_id, self.ngo_member.id)
+        self.assertEqual(delivery.status, "assigned")
+        self.assertEqual(self.donation.status, "available")
+
+    def test_full_reservation_marks_donation_matched(self):
+        reserve_donation(
+            DirectReservationCreate(
+                donation_id=self.donation.id,
+                allocated_quantity=self.donation.quantity,
+            ),
+            self.db,
+            self.ngo_member,
+        )
+
+        self.db.refresh(self.donation)
+        self.assertEqual(self.donation.status, "matched")
+
+    def test_reservation_rejects_quantity_above_remaining_supply(self):
+        with self.assertRaises(HTTPException) as context:
+            reserve_donation(
+                DirectReservationCreate(
+                    donation_id=self.donation.id,
+                    allocated_quantity=self.donation.quantity + 1,
+                ),
+                self.db,
+                self.ngo_member,
+            )
+
+        self.assertEqual(context.exception.status_code, 409)
+        self.assertEqual(self.db.query(Match).count(), 0)
+        self.assertEqual(self.db.query(Deliveries).count(), 0)
+
+    def test_partial_reservation_reports_remaining_donation_quantity(self):
+        reserve_donation(
+            DirectReservationCreate(
+                donation_id=self.donation.id,
+                allocated_quantity=25,
+            ),
+            self.db,
+            self.ngo_member,
+        )
+
+        results = list_donations(
+            category=None,
+            pickup_address=None,
+            db=self.db,
+            current_user=self.ngo_member,
+        )
+
+        self.assertEqual(results[0].remaining_quantity, 75)
+
+    def test_donor_response_creates_match_for_request_owner(self):
+        match = respond_to_request(
+            RequestMatchCreate(
+                donation_id=self.donation.id,
+                request_id=self.food_request.id,
+                allocated_quantity=self.food_request.quantity,
+            ),
+            self.db,
+            self.donor,
+        )
+
+        delivery = self.db.query(Deliveries).filter_by(match_id=match.id).one()
+
+        self.db.refresh(self.food_request)
+        self.assertEqual(match.request_id, self.food_request.id)
+        self.assertEqual(match.ngo_id, self.food_request.ngo_id)
+        self.assertEqual(delivery.assigned_ngo_member_id, self.food_request.ngo_id)
+        self.assertEqual(self.food_request.status, "matched")
+
+    def test_partial_response_reports_remaining_request_quantity(self):
+        respond_to_request(
+            RequestMatchCreate(
+                donation_id=self.donation.id,
+                request_id=self.food_request.id,
+                allocated_quantity=20,
+            ),
+            self.db,
+            self.donor,
+        )
+
+        results = list_open_requests(
+            category=None,
+            location=None,
+            db=self.db,
+            current_user=self.donor,
+        )
+
+        self.assertEqual(results[0].remaining_quantity, 50)
+
+    def test_donor_response_rejects_mismatched_units(self):
+        self.food_request.unit = "packets"
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as context:
+            respond_to_request(
+                RequestMatchCreate(
+                    donation_id=self.donation.id,
+                    request_id=self.food_request.id,
+                    allocated_quantity=10,
+                ),
+                self.db,
+                self.donor,
+            )
+
+        self.assertEqual(context.exception.status_code, 409)
+        self.assertEqual(self.db.query(Match).count(), 0)
+        self.assertEqual(self.db.query(Deliveries).count(), 0)
+
+    def test_donor_cannot_match_another_donors_donation(self):
+        other_donor = User(
+            name="Other Donor",
+            email="other-matching-donor@example.com",
+            password_hash="test-hash",
+            phone="9876543212",
+            role="donor",
+            donor_type="individual",
+            location="Katpadi",
+        )
+        self.db.add(other_donor)
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as context:
+            respond_to_request(
+                RequestMatchCreate(
+                    donation_id=self.donation.id,
+                    request_id=self.food_request.id,
+                    allocated_quantity=10,
+                ),
+                self.db,
+                other_donor,
+            )
+
+        self.assertEqual(context.exception.status_code, 403)
+        self.assertEqual(self.db.query(Match).count(), 0)
+        self.assertEqual(self.db.query(Deliveries).count(), 0)
 
 
 if __name__ == "__main__":

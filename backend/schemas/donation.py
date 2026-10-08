@@ -99,6 +99,7 @@ class DonationResponse(BaseModel):
     description: str | None
     category: str
     quantity: int
+    remaining_quantity: int | None = Field(default=None, ge=0)
     unit: str
     prepared_at: datetime
     expiry_time: datetime

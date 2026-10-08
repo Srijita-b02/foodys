@@ -15,7 +15,7 @@ function RoleSelector({ value, onChange }) {
           <small>
             {role === 'Donor'
               ? 'Individual or restaurant'
-              : 'NGO member or volunteer'}
+              : 'NGO member account'}
           </small>
         </button>
       ))}

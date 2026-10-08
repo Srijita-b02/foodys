@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from database.database import get_db
 from models.deliveries import Deliveries
@@ -10,7 +10,7 @@ from models.donation import Donation
 from models.food_request import FoodRequest
 from models.match import Match
 from models.user import User
-from schemas.deliveries import DeliveriesRead, DeliveriesStatusUpdate
+from schemas.deliveries import DeliveriesStatusUpdate, DeliveryDetailsRead
 from utils.auth import require_roles
 
 
@@ -27,6 +27,59 @@ VALID_TRANSITIONS = {
     "delivered": set(),
     "cancelled": set(),
 }
+
+
+def _delivery_details_query(current_user: User):
+    donor_user = aliased(User)
+    ngo_user = aliased(User)
+
+    return (
+        select(
+            Deliveries,
+            Match,
+            Donation,
+            FoodRequest,
+            donor_user,
+            ngo_user,
+        )
+        .join(Match, Match.id == Deliveries.match_id)
+        .join(Donation, Donation.id == Match.donation_id)
+        .outerjoin(FoodRequest, FoodRequest.id == Match.request_id)
+        .join(donor_user, donor_user.id == Donation.donor_id)
+        .join(ngo_user, ngo_user.id == Match.ngo_id)
+        .where(Deliveries.assigned_ngo_member_id == current_user.id)
+    )
+
+
+def _to_delivery_details(row) -> DeliveryDetailsRead:
+    deliveries, match, donation, food_request, donor_user, ngo_user = row
+
+    return DeliveryDetailsRead(
+        id=deliveries.id,
+        match_id=deliveries.match_id,
+        assigned_ngo_member_id=deliveries.assigned_ngo_member_id,
+        status=deliveries.status,
+        assigned_at=deliveries.assigned_at,
+        pickup_time=deliveries.pickup_time,
+        delivery_time=deliveries.delivery_time,
+        created_at=deliveries.created_at,
+        updated_at=deliveries.updated_at,
+        donation_id=donation.id,
+        request_id=match.request_id,
+        allocated_quantity=match.allocated_quantity,
+        match_status=match.status,
+        food_name=donation.food_name,
+        category=donation.category,
+        unit=donation.unit,
+        pickup_address=donation.pickup_address,
+        expiry_time=donation.expiry_time,
+        donor_name=donor_user.name,
+        ngo_member_name=ngo_user.name,
+        organization_name=ngo_user.organization_name,
+        destination_location=(
+            food_request.location if food_request else ngo_user.location
+        ),
+    )
 
 
 def _check_access(
@@ -228,7 +281,7 @@ def update_deliveries_status(
     # Everything below must succeed together:
     #
     # 1. Delivery -> delivered
-    # 2. deliveries_time set
+    # 2. delivery_time set
     # 3. Match -> completed
     # 4. Donation recalculated
     # 5. FoodRequest recalculated
@@ -237,7 +290,7 @@ def update_deliveries_status(
     # --------------------------------------------------------------
     try:
         deliveries.status = "delivered"
-        deliveries.deliveries_time = now
+        deliveries.delivery_time = now
 
         match = db.scalar(
             select(Match)
@@ -299,6 +352,39 @@ def update_deliveries_status(
     return deliveries
 
 
+def list_my_delivery_details(
+    db: Session,
+    current_user: User,
+):
+    if current_user.role != "ngo":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only NGO members can access deliveries.",
+        )
+
+    rows = db.execute(
+        _delivery_details_query(current_user).order_by(
+            Deliveries.created_at.desc()
+        )
+    ).all()
+    return [_to_delivery_details(row) for row in rows]
+
+
+def get_delivery_details(
+    delivery_id: int,
+    db: Session,
+    current_user: User,
+):
+    # Preserve the existing missing-record and assigned-member checks.
+    get_deliveries(delivery_id, db, current_user)
+    row = db.execute(
+        _delivery_details_query(current_user).where(
+            Deliveries.id == delivery_id
+        )
+    ).one()
+    return _to_delivery_details(row)
+
+
 # ------------------------------------------------------------------
 # FastAPI endpoints
 # ------------------------------------------------------------------
@@ -306,13 +392,13 @@ def update_deliveries_status(
 
 @router.get(
     "/my",
-    response_model=list[DeliveriesRead],
+    response_model=list[DeliveryDetailsRead],
 )
 def api_list_my_deliveries(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("ngo")),
 ):
-    return list_my_deliveries(
+    return list_my_delivery_details(
         db,
         current_user,
     )
@@ -320,14 +406,14 @@ def api_list_my_deliveries(
 
 @router.get(
     "/{delivery_id}",
-    response_model=DeliveriesRead,
+    response_model=DeliveryDetailsRead,
 )
 def api_get_deliveries(
     delivery_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("ngo")),
 ):
-    return get_deliveries(
+    return get_delivery_details(
         delivery_id,
         db,
         current_user,
@@ -336,7 +422,7 @@ def api_get_deliveries(
 
 @router.patch(
     "/{delivery_id}/status",
-    response_model=DeliveriesRead,
+    response_model=DeliveryDetailsRead,
 )
 def api_update_deliveries_status(
     delivery_id: int,
@@ -344,9 +430,14 @@ def api_update_deliveries_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("ngo")),
 ):
-    return update_deliveries_status(
+    update_deliveries_status(
         delivery_id,
         payload,
+        db,
+        current_user,
+    )
+    return get_delivery_details(
+        delivery_id,
         db,
         current_user,
     )

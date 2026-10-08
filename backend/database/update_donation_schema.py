@@ -14,6 +14,8 @@ def update_donation_schema():
         "ALTER TABLE donations DROP CONSTRAINT IF EXISTS ck_donations_quantity_positive",
         "ALTER TABLE donations DROP CONSTRAINT IF EXISTS ck_donations_expiry_after_prepared",
         "ALTER TABLE donations DROP CONSTRAINT IF EXISTS ck_donations_status",
+        "ALTER TABLE donations DROP CONSTRAINT IF EXISTS donations_donor_id_fkey",
+        "ALTER TABLE donations DROP CONSTRAINT IF EXISTS fk_donations_donor_id",
         """
         ALTER TABLE donations
         ADD CONSTRAINT ck_donations_quantity_positive CHECK (quantity > 0)
@@ -32,6 +34,11 @@ def update_donation_schema():
                 'assigned', 'in_transit', 'delivered', 'cancelled', 'expired'
             )
         )
+        """,
+        """
+        ALTER TABLE donations
+        ADD CONSTRAINT fk_donations_donor_id
+        FOREIGN KEY (donor_id) REFERENCES users(id) ON DELETE RESTRICT
         """,
         "CREATE INDEX IF NOT EXISTS ix_donations_category ON donations (category)",
         "CREATE INDEX IF NOT EXISTS ix_donations_pickup_address ON donations (pickup_address)",

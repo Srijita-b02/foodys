@@ -49,7 +49,7 @@ class Deliveries(Base):
         nullable=True,
     )
 
-    deliveries_time: Mapped[datetime | None] = mapped_column(
+    delivery_time: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

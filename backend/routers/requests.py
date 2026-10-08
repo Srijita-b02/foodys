@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from database.database import get_db
 from models.food_request import FoodRequest
+from models.match import Match
 from models.user import User
 from schemas.food_request import (
     FoodRequestCreate,
@@ -20,6 +21,22 @@ router = APIRouter(
     prefix="/requests",
     tags=["Food Requests"],
 )
+
+
+def attach_remaining_quantity(
+    food_request: FoodRequest,
+    db: Session,
+) -> FoodRequest:
+    """Attach the quantity not yet allocated by non-cancelled matches."""
+
+    allocated = db.scalar(
+        select(func.coalesce(func.sum(Match.allocated_quantity), 0)).where(
+            Match.request_id == food_request.id,
+            Match.status != "cancelled",
+        )
+    ) or 0
+    food_request.remaining_quantity = max(food_request.quantity - allocated, 0)
+    return food_request
 
 
 def expire_open_requests(db: Session) -> None:
@@ -72,7 +89,7 @@ def create_food_request(
     db.commit()
     db.refresh(food_request)
 
-    return food_request
+    return attach_remaining_quantity(food_request, db)
 
 
 @router.get("", response_model=list[FoodRequestResponse])
@@ -93,7 +110,11 @@ def list_open_requests(
     if location:
         query = query.where(FoodRequest.location == location)
 
-    return db.scalars(query.order_by(FoodRequest.needed_before)).all()
+    food_requests = db.scalars(query.order_by(FoodRequest.needed_before)).all()
+    return [
+        attach_remaining_quantity(food_request, db)
+        for food_request in food_requests
+    ]
 
 
 @router.get("/my", response_model=list[FoodRequestResponse])
@@ -109,7 +130,11 @@ def list_my_requests(
         .order_by(FoodRequest.created_at.desc())
     )
 
-    return db.scalars(query).all()
+    food_requests = db.scalars(query).all()
+    return [
+        attach_remaining_quantity(food_request, db)
+        for food_request in food_requests
+    ]
 
 
 @router.get("/{request_id}", response_model=FoodRequestResponse)
@@ -120,7 +145,8 @@ def get_food_request(
 ):
     del current_user
     expire_open_requests(db)
-    return get_request_or_404(request_id, db)
+    food_request = get_request_or_404(request_id, db)
+    return attach_remaining_quantity(food_request, db)
 
 
 @router.put("/{request_id}", response_model=FoodRequestResponse)
@@ -160,7 +186,7 @@ def update_food_request(
     db.commit()
     db.refresh(food_request)
 
-    return food_request
+    return attach_remaining_quantity(food_request, db)
 
 
 @router.delete("/{request_id}", response_model=FoodRequestResponse)
@@ -188,4 +214,4 @@ def cancel_food_request(
     db.commit()
     db.refresh(food_request)
 
-    return food_request
+    return attach_remaining_quantity(food_request, db)

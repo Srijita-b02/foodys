@@ -1,30 +1,73 @@
+import { useEffect, useState } from 'react'
 import PageHeader from '../components/PageHeader'
 import StatusBadge from '../components/StatusBadge'
+import { apiRequest } from '../api'
 
-function MyDonations({ onNavigate }) {
-  const donations = [
-    {
-      id: 1,
-      food: 'Vegetable meals',
-      quantity: '20 servings',
-      date: 'Today · 5:00 PM',
-      status: 'Available',
-    },
-    {
-      id: 2,
-      food: 'Bread & pastries',
-      quantity: '12 servings',
-      date: 'Today · 7:30 PM',
-      status: 'Reserved',
-    },
-    {
-      id: 3,
-      food: 'Rice meals',
-      quantity: '30 servings',
-      date: 'Yesterday',
-      status: 'Delivered',
-    },
-  ]
+function formatDate(value) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function MyDonations({ token, onNavigate, onEdit }) {
+  const [donations, setDonations] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [cancellingId, setCancellingId] = useState(null)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    let ignore = false
+
+    apiRequest('/donations/my', { token })
+      .then((data) => {
+        if (!ignore) {
+          setDonations(data)
+        }
+      })
+      .catch((error) => {
+        if (!ignore) {
+          setMessage(error.message)
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [token])
+
+  async function cancelDonation(donation) {
+    const confirmed = window.confirm(
+      `Cancel the donation "${donation.food_name}"?`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setMessage('')
+    setCancellingId(donation.id)
+
+    try {
+      const cancelled = await apiRequest(`/donations/${donation.id}`, {
+        method: 'DELETE',
+        token,
+      })
+
+      setDonations((current) =>
+        current.map((item) => (item.id === cancelled.id ? cancelled : item)),
+      )
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setCancellingId(null)
+    }
+  }
 
   return (
     <>
@@ -35,17 +78,57 @@ function MyDonations({ onNavigate }) {
         actionLabel="New donation"
       />
 
+      {message && (
+        <p className="form-message form-error page-message" role="alert">
+          {message}
+        </p>
+      )}
+
       <section className="content-card">
+        {isLoading && <p className="empty-state">Loading donations...</p>}
+
+        {!isLoading && donations.length === 0 && (
+          <p className="empty-state">
+            You have not created any donations yet.
+          </p>
+        )}
+
         {donations.map((donation) => (
           <div className="list-row" key={donation.id}>
             <div>
-              <strong>{donation.food}</strong>
+              <strong>{donation.food_name}</strong>
               <p>
-                {donation.quantity} · {donation.date}
+                {donation.remaining_quantity ?? donation.quantity} of{' '}
+                {donation.quantity} {donation.unit} remaining · Expires{' '}
+                {formatDate(donation.expiry_time)}
               </p>
             </div>
 
-            <StatusBadge status={donation.status} />
+            <div className="row-actions">
+              <StatusBadge status={donation.status} />
+
+              {donation.status === 'available' && (
+                <>
+                  <button
+                    className="secondary-button compact-button"
+                    type="button"
+                    disabled={cancellingId === donation.id}
+                    onClick={() => onEdit(donation.id)}
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    className="danger-button"
+                    type="button"
+                    disabled={cancellingId === donation.id}
+                    onClick={() => cancelDonation(donation)}
+                  >
+                    {cancellingId === donation.id ? 'Cancelling...' : 'Cancel'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </section>

@@ -1,89 +1,215 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import Login from './pages/Login'
 import Register from './pages/Register'
 
 import DonorDashboard from './pages/DonorDashboard'
 import CreateDonation from './pages/CreateDonation'
+import EditDonation from './pages/EditDonation'
 import MyDonations from './pages/MyDonations'
 import BrowseRequests from './pages/BrowseRequests'
 
 import NgoDashboard from './pages/NgoDashboard'
 import CreateRequest from './pages/CreateRequest'
+import EditRequest from './pages/EditRequest'
 import MyRequests from './pages/MyRequests'
 import AvailableFood from './pages/AvailableFood'
 
 import Deliveries from './pages/Deliveries'
 import Sidebar from './components/Sidebar'
+import {
+  apiRequest,
+  clearSession,
+  loadSession,
+  saveSession,
+} from './api'
 
 import './App.css'
 
 function App() {
-  const [selectedRole, setSelectedRole] = useState('Donor')
+  const [initialSession] = useState(loadSession)
+  const [selectedRole, setSelectedRole] = useState(
+    initialSession?.user.role === 'ngo' ? 'NGO' : 'Donor',
+  )
   const [authPage, setAuthPage] = useState('login')
-
-  // Temporary for frontend testing.
-  // Later successful backend login will set this to true.
-  const [loggedIn, setLoggedIn] = useState(false)
-
+  const [authNotice, setAuthNotice] = useState('')
+  const [token, setToken] = useState(initialSession?.token || null)
+  const [currentUser, setCurrentUser] = useState(initialSession?.user || null)
+  const [restoringSession, setRestoringSession] = useState(Boolean(initialSession))
   const [currentPage, setCurrentPage] = useState('dashboard')
+  const [editingDonationId, setEditingDonationId] = useState(null)
+  const [editingRequestId, setEditingRequestId] = useState(null)
 
-  function handleLogin() {
-    setLoggedIn(true)
+  useEffect(() => {
+    if (!initialSession) {
+      return
+    }
+
+    apiRequest('/auth/me', { token: initialSession.token })
+      .then((user) => {
+        saveSession(initialSession.token, user)
+        setCurrentUser(user)
+        setSelectedRole(user.role === 'ngo' ? 'NGO' : 'Donor')
+      })
+      .catch(() => {
+        clearSession()
+        setToken(null)
+        setCurrentUser(null)
+        setAuthNotice('Your session expired. Please sign in again.')
+      })
+      .finally(() => setRestoringSession(false))
+  }, [initialSession])
+
+  function handleLogin(loginResponse) {
+    saveSession(loginResponse.access_token, loginResponse.user)
+    setToken(loginResponse.access_token)
+    setCurrentUser(loginResponse.user)
+    setSelectedRole(loginResponse.user.role === 'ngo' ? 'NGO' : 'Donor')
+    setAuthNotice('')
     setCurrentPage('dashboard')
+    setEditingDonationId(null)
+    setEditingRequestId(null)
   }
 
   function handleLogout() {
-    setLoggedIn(false)
+    clearSession()
+    setToken(null)
+    setCurrentUser(null)
     setAuthPage('login')
+    setAuthNotice('')
     setCurrentPage('dashboard')
+    setEditingDonationId(null)
+    setEditingRequestId(null)
+  }
+
+  function handleRegistered() {
+    setAuthNotice('Registration successful. You can now sign in.')
+    setAuthPage('login')
+  }
+
+  function handleEditDonation(donationId) {
+    setEditingDonationId(donationId)
+    setCurrentPage('edit-donation')
+  }
+
+  function leaveEditDonation() {
+    setEditingDonationId(null)
+    setCurrentPage('donations')
+  }
+
+  function handleEditRequest(requestId) {
+    setEditingRequestId(requestId)
+    setCurrentPage('edit-request')
+  }
+
+  function leaveEditRequest() {
+    setEditingRequestId(null)
+    setCurrentPage('my-requests')
   }
 
   function renderPage() {
     if (selectedRole === 'Donor') {
       switch (currentPage) {
         case 'donate':
-          return <CreateDonation />
+          return <CreateDonation token={token} />
 
         case 'donations':
-          return <MyDonations onNavigate={setCurrentPage} />
+          return (
+            <MyDonations
+              token={token}
+              onNavigate={setCurrentPage}
+              onEdit={handleEditDonation}
+            />
+          )
+
+        case 'edit-donation':
+          return editingDonationId ? (
+            <EditDonation
+              token={token}
+              donationId={editingDonationId}
+              onCancel={leaveEditDonation}
+              onSaved={leaveEditDonation}
+            />
+          ) : (
+            <MyDonations
+              token={token}
+              onNavigate={setCurrentPage}
+              onEdit={handleEditDonation}
+            />
+          )
 
         case 'requests':
-          return <BrowseRequests />
-
-        case 'deliveries':
-          return <Deliveries />
+          return <BrowseRequests token={token} canRespond />
 
         default:
-          return <DonorDashboard onNavigate={setCurrentPage} />
+          return <DonorDashboard token={token} onNavigate={setCurrentPage} />
       }
     }
 
     switch (currentPage) {
       case 'request':
-        return <CreateRequest />
+        return <CreateRequest token={token} />
 
       case 'my-requests':
-        return <MyRequests />
+        return (
+          <MyRequests
+            token={token}
+            onNavigate={setCurrentPage}
+            onEdit={handleEditRequest}
+          />
+        )
+
+      case 'edit-request':
+        return editingRequestId ? (
+          <EditRequest
+            token={token}
+            requestId={editingRequestId}
+            onCancel={leaveEditRequest}
+            onSaved={leaveEditRequest}
+          />
+        ) : (
+          <MyRequests
+            token={token}
+            onNavigate={setCurrentPage}
+            onEdit={handleEditRequest}
+          />
+        )
+
+      case 'requests':
+        return <BrowseRequests token={token} canRespond={false} />
 
       case 'available':
-        return <AvailableFood />
+        return <AvailableFood token={token} />
 
       case 'deliveries':
-        return <Deliveries />
+        return <Deliveries token={token} />
 
       default:
-        return <NgoDashboard onNavigate={setCurrentPage} />
+        return (
+          <NgoDashboard token={token} onNavigate={setCurrentPage} />
+        )
     }
   }
 
-  if (!loggedIn) {
+  if (restoringSession) {
+    return (
+      <main className="session-loading" aria-live="polite">
+        Restoring your session...
+      </main>
+    )
+  }
+
+  if (!currentUser || !token) {
     if (authPage === 'register') {
       return (
         <Register
           role={selectedRole}
           onRoleChange={setSelectedRole}
-          onLogin={() => setAuthPage('login')}
+          onLogin={() => {
+            setAuthNotice('')
+            setAuthPage('login')
+          }}
+          onRegistered={handleRegistered}
         />
       )
     }
@@ -92,7 +218,11 @@ function App() {
       <Login
         role={selectedRole}
         onRoleChange={setSelectedRole}
-        onRegister={() => setAuthPage('register')}
+        notice={authNotice}
+        onRegister={() => {
+          setAuthNotice('')
+          setAuthPage('register')
+        }}
         onLogin={handleLogin}
       />
     )
@@ -101,7 +231,7 @@ function App() {
   return (
     <div className="dashboard-layout">
       <Sidebar
-        role={selectedRole}
+        role={currentUser.role === 'ngo' ? 'NGO' : 'Donor'}
         activePage={currentPage}
         onNavigate={setCurrentPage}
         onLogout={handleLogout}

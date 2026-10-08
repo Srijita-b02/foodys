@@ -1,7 +1,63 @@
+import { useEffect, useState } from 'react'
 import PageHeader from '../components/PageHeader'
 import StatusBadge from '../components/StatusBadge'
+import { apiRequest } from '../api'
 
-function DonorDashboard({ onNavigate }) {
+function formatDate(value) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function DonorDashboard({ token, onNavigate }) {
+  const [donations, setDonations] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    let ignore = false
+
+    apiRequest('/donations/my', { token })
+      .then((data) => {
+        if (!ignore) {
+          setDonations(data)
+        }
+      })
+      .catch((error) => {
+        if (!ignore) {
+          setMessage(error.message)
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [token])
+
+  const activeStatuses = new Set([
+    'available',
+    'reserved',
+    'matched',
+    'assigned',
+    'picked_up',
+    'in_transit',
+  ])
+  const activeCount = donations.filter((item) =>
+    activeStatuses.has(item.status),
+  ).length
+  const reservedCount = donations.filter(
+    (item) => item.status === 'reserved',
+  ).length
+  const deliveredCount = donations.filter(
+    (item) => item.status === 'delivered',
+  ).length
+
   return (
     <>
       <PageHeader
@@ -14,19 +70,25 @@ function DonorDashboard({ onNavigate }) {
       <section className="stats-grid">
         <div className="stat-card">
           <span>Active donations</span>
-          <strong>3</strong>
+          <strong>{isLoading ? '—' : activeCount}</strong>
         </div>
 
         <div className="stat-card">
           <span>Reserved</span>
-          <strong>1</strong>
+          <strong>{isLoading ? '—' : reservedCount}</strong>
         </div>
 
         <div className="stat-card">
           <span>Delivered</span>
-          <strong>12</strong>
+          <strong>{isLoading ? '—' : deliveredCount}</strong>
         </div>
       </section>
+
+      {message && (
+        <p className="form-message form-error page-message" role="alert">
+          {message}
+        </p>
+      )}
 
       <section className="content-card">
         <div className="section-heading">
@@ -43,23 +105,26 @@ function DonorDashboard({ onNavigate }) {
           </button>
         </div>
 
-        <div className="list-row">
-          <div>
-            <strong>Vegetable meals</strong>
-            <p>20 servings · Today, 5:00 PM</p>
+        {isLoading && <p className="empty-state">Loading donations...</p>}
+
+        {!isLoading && donations.length === 0 && (
+          <p className="empty-state">No donations yet.</p>
+        )}
+
+        {donations.slice(0, 2).map((donation) => (
+          <div className="list-row" key={donation.id}>
+            <div>
+              <strong>{donation.food_name}</strong>
+              <p>
+                {donation.remaining_quantity ?? donation.quantity} of{' '}
+                {donation.quantity} {donation.unit} remaining · Expires{' '}
+                {formatDate(donation.expiry_time)}
+              </p>
+            </div>
+
+            <StatusBadge status={donation.status} />
           </div>
-
-          <StatusBadge status="Available" />
-        </div>
-
-        <div className="list-row">
-          <div>
-            <strong>Bread & pastries</strong>
-            <p>12 servings · Today, 7:30 PM</p>
-          </div>
-
-          <StatusBadge status="Reserved" />
-        </div>
+        ))}
       </section>
     </>
   )

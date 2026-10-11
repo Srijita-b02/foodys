@@ -9,6 +9,7 @@ from routers.donations import router as donations_router
 from routers.requests import router as requests_router
 from routers.deliveries import router as deliveries_router
 from routers.matches import router as matches_router
+from routers.statistics import router as statistics_router
 
 
 load_dotenv()
@@ -44,6 +45,7 @@ app.include_router(donations_router)
 app.include_router(requests_router)
 app.include_router(matches_router)
 app.include_router(deliveries_router)
+app.include_router(statistics_router)
 
 
 @app.get("/")

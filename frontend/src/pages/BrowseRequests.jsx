@@ -9,14 +9,8 @@ function formatDate(value) {
   }).format(new Date(value))
 }
 
-function sameUnit(first, second) {
-  return first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase()
-}
-
 function BrowseRequests({ token, canRespond }) {
   const [requests, setRequests] = useState([])
-  const [donations, setDonations] = useState([])
-  const [selectedDonations, setSelectedDonations] = useState({})
   const [allocations, setAllocations] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [submittingId, setSubmittingId] = useState(null)
@@ -26,21 +20,10 @@ function BrowseRequests({ token, canRespond }) {
   useEffect(() => {
     let ignore = false
     const requestPromise = apiRequest('/requests', { token })
-    const donationPromise = canRespond
-      ? apiRequest('/donations/my', { token })
-      : Promise.resolve([])
-
-    Promise.all([requestPromise, donationPromise])
-      .then(([requestData, donationData]) => {
+    requestPromise
+      .then((requestData) => {
         if (!ignore) {
           setRequests(requestData)
-          setDonations(
-            donationData.filter(
-              (item) =>
-                item.status === 'available' &&
-                (item.remaining_quantity ?? item.quantity) > 0,
-            ),
-          )
         }
       })
       .catch((error) => {
@@ -60,66 +43,37 @@ function BrowseRequests({ token, canRespond }) {
     }
   }, [canRespond, token])
 
-  async function respondToRequest(event, foodRequest, eligibleDonations) {
+  async function acceptRequest(event, foodRequest) {
     event.preventDefault()
     setMessage('')
     setIsError(false)
 
-    const selectedId = Number(
-      selectedDonations[foodRequest.id] ?? eligibleDonations[0]?.id,
-    )
-    const donation = eligibleDonations.find((item) => item.id === selectedId)
-
-    if (!donation) {
-      setIsError(true)
-      setMessage(`No available donation uses the unit "${foodRequest.unit}".`)
-      return
-    }
-
     const requestRemaining =
       foodRequest.remaining_quantity ?? foodRequest.quantity
-    const donationRemaining = donation.remaining_quantity ?? donation.quantity
-    const maximum = Math.min(requestRemaining, donationRemaining)
     const allocatedQuantity = Number(
-      allocations[foodRequest.id] ?? maximum,
+      allocations[foodRequest.id] ?? requestRemaining,
     )
 
-    if (allocatedQuantity <= 0 || allocatedQuantity > maximum) {
+    if (allocatedQuantity <= 0 || allocatedQuantity > requestRemaining) {
       setIsError(true)
-      setMessage(`Enter a quantity between 1 and ${maximum}.`)
+      setMessage(`Enter a quantity between 1 and ${requestRemaining}.`)
       return
     }
 
     setSubmittingId(foodRequest.id)
 
     try {
-      await apiRequest('/matches/respond', {
+      await apiRequest('/matches/accept-request', {
         method: 'POST',
         token,
         body: {
-          donation_id: donation.id,
           request_id: foodRequest.id,
           allocated_quantity: allocatedQuantity,
         },
       })
 
-      const [requestData, donationData] = await Promise.all([
-        apiRequest('/requests', { token }),
-        apiRequest('/donations/my', { token }),
-      ])
+      const requestData = await apiRequest('/requests', { token })
       setRequests(requestData)
-      setDonations(
-        donationData.filter(
-          (item) =>
-            item.status === 'available' &&
-            (item.remaining_quantity ?? item.quantity) > 0,
-        ),
-      )
-      setSelectedDonations((current) => {
-        const updated = { ...current }
-        delete updated[foodRequest.id]
-        return updated
-      })
       setAllocations((current) => {
         const updated = { ...current }
         delete updated[foodRequest.id]
@@ -142,7 +96,7 @@ function BrowseRequests({ token, canRespond }) {
         title="Open food requests"
         description={
           canRespond
-            ? 'Select one of your compatible donations to answer a request.'
+            ? 'Accept a request and enter the quantity you can provide.'
             : 'Open requests from NGO members, shown to help avoid duplicates.'
         }
       />
@@ -166,20 +120,6 @@ function BrowseRequests({ token, canRespond }) {
         {requests.map((foodRequest) => {
           const requestRemaining =
             foodRequest.remaining_quantity ?? foodRequest.quantity
-          const eligibleDonations = donations.filter((donation) =>
-            sameUnit(donation.unit, foodRequest.unit),
-          )
-          const selectedId = Number(
-            selectedDonations[foodRequest.id] ?? eligibleDonations[0]?.id,
-          )
-          const selectedDonation = eligibleDonations.find(
-            (donation) => donation.id === selectedId,
-          )
-          const donationRemaining = selectedDonation
-            ? selectedDonation.remaining_quantity ?? selectedDonation.quantity
-            : 0
-          const maximum = Math.min(requestRemaining, donationRemaining)
-
           return (
             <div className="request-card" key={foodRequest.id}>
               <div>
@@ -193,49 +133,11 @@ function BrowseRequests({ token, canRespond }) {
                 {foodRequest.description && <p>{foodRequest.description}</p>}
               </div>
 
-              {canRespond && eligibleDonations.length > 0 && (
+              {canRespond && (
                 <form
                   className="match-form response-form"
-                  onSubmit={(event) =>
-                    respondToRequest(event, foodRequest, eligibleDonations)
-                  }
+                  onSubmit={(event) => acceptRequest(event, foodRequest)}
                 >
-                  <label htmlFor={`response-donation-${foodRequest.id}`}>
-                    Your donation
-                  </label>
-                  <select
-                    id={`response-donation-${foodRequest.id}`}
-                    value={selectedId}
-                    onChange={(event) => {
-                      const donationId = Number(event.target.value)
-                      const nextDonation = eligibleDonations.find(
-                        (item) => item.id === donationId,
-                      )
-                      const nextMaximum = Math.min(
-                        requestRemaining,
-                        nextDonation?.remaining_quantity ??
-                          nextDonation?.quantity ??
-                          0,
-                      )
-                      setSelectedDonations((current) => ({
-                        ...current,
-                        [foodRequest.id]: donationId,
-                      }))
-                      setAllocations((current) => ({
-                        ...current,
-                        [foodRequest.id]: nextMaximum,
-                      }))
-                    }}
-                  >
-                    {eligibleDonations.map((donation) => (
-                      <option key={donation.id} value={donation.id}>
-                        {donation.food_name} —{' '}
-                        {donation.remaining_quantity ?? donation.quantity}{' '}
-                        {donation.unit}
-                      </option>
-                    ))}
-                  </select>
-
                   <label htmlFor={`response-quantity-${foodRequest.id}`}>
                     Quantity ({foodRequest.unit})
                   </label>
@@ -243,8 +145,8 @@ function BrowseRequests({ token, canRespond }) {
                     id={`response-quantity-${foodRequest.id}`}
                     type="number"
                     min="1"
-                    max={maximum}
-                    value={allocations[foodRequest.id] ?? maximum}
+                    max={requestRemaining}
+                    value={allocations[foodRequest.id] ?? requestRemaining}
                     onChange={(event) =>
                       setAllocations((current) => ({
                         ...current,
@@ -261,15 +163,9 @@ function BrowseRequests({ token, canRespond }) {
                   >
                     {submittingId === foodRequest.id
                       ? 'Matching...'
-                      : 'Respond'}
+                      : 'Accept request'}
                   </button>
                 </form>
-              )}
-
-              {canRespond && eligibleDonations.length === 0 && (
-                <p className="match-note">
-                  No available donation uses the unit “{foodRequest.unit}”.
-                </p>
               )}
             </div>
           )

@@ -21,6 +21,11 @@ class RequestMatchCreate(BaseModel):
     allocated_quantity: int = Field(gt=0)
 
 
+class RequestAcceptanceCreate(BaseModel):
+    request_id: int = Field(gt=0)
+    allocated_quantity: int = Field(gt=0)
+
+
 class MatchResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -107,3 +107,15 @@ class DonationResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class DonationAllocationResponse(BaseModel):
+    match_id: int
+    donation_id: int
+    request_id: int | None
+    allocated_quantity: int = Field(gt=0)
+    match_status: str
+    delivery_status: str
+    assigned_at: datetime
+    pickup_time: datetime | None
+    delivery_time: datetime | None

@@ -34,7 +34,9 @@ class DeliveriesTests(unittest.TestCase):
             cursor.close()
 
         Base.metadata.create_all(self.engine)
-        self.Session = sessionmaker(bind=self.engine)
+        # Match the production SessionLocal configuration so aggregate status
+        # recalculation cannot rely on SQLAlchemy's automatic flush behavior.
+        self.Session = sessionmaker(bind=self.engine, autoflush=False)
         self.db = self.Session()
 
         self.donor = User(

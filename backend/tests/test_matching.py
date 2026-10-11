@@ -18,9 +18,13 @@ from models.donation import Donation
 from models.food_request import FoodRequest
 from models.match import Match
 from models.user import User
-from schemas.match import DirectReservationCreate, RequestMatchCreate
+from schemas.match import (
+    DirectReservationCreate,
+    RequestAcceptanceCreate,
+    RequestMatchCreate,
+)
 from routers.donations import list_donations
-from routers.matches import reserve_donation, respond_to_request
+from routers.matches import accept_request, reserve_donation, respond_to_request
 from routers.requests import list_open_requests
 
 
@@ -270,6 +274,57 @@ class MatchModelTests(unittest.TestCase):
         self.assertEqual(match.ngo_id, self.food_request.ngo_id)
         self.assertEqual(delivery.assigned_ngo_member_id, self.food_request.ngo_id)
         self.assertEqual(self.food_request.status, "matched")
+
+    def test_accept_request_creates_donation_match_and_delivery(self):
+        match = accept_request(
+            RequestAcceptanceCreate(
+                request_id=self.food_request.id,
+                allocated_quantity=25,
+            ),
+            self.db,
+            self.donor,
+        )
+
+        donation = self.db.get(Donation, match.donation_id)
+        delivery = self.db.query(Deliveries).filter_by(match_id=match.id).one()
+
+        self.db.refresh(self.food_request)
+        self.assertEqual(donation.donor_id, self.donor.id)
+        self.assertEqual(donation.food_name, self.food_request.food_name)
+        self.assertEqual(donation.quantity, 25)
+        self.assertEqual(donation.pickup_address, self.donor.location)
+        self.assertEqual(donation.expiry_time, self.food_request.needed_before)
+        self.assertEqual(donation.status, "matched")
+        self.assertEqual(delivery.assigned_ngo_member_id, self.food_request.ngo_id)
+        self.assertEqual(self.food_request.status, "open")
+
+    def test_accept_request_full_quantity_locks_request_as_matched(self):
+        accept_request(
+            RequestAcceptanceCreate(
+                request_id=self.food_request.id,
+                allocated_quantity=self.food_request.quantity,
+            ),
+            self.db,
+            self.donor,
+        )
+
+        self.db.refresh(self.food_request)
+        self.assertEqual(self.food_request.status, "matched")
+
+    def test_accept_request_rejects_quantity_above_remaining(self):
+        with self.assertRaises(HTTPException) as context:
+            accept_request(
+                RequestAcceptanceCreate(
+                    request_id=self.food_request.id,
+                    allocated_quantity=self.food_request.quantity + 1,
+                ),
+                self.db,
+                self.donor,
+            )
+
+        self.assertEqual(context.exception.status_code, 409)
+        self.assertEqual(self.db.query(Donation).count(), 1)
+        self.assertEqual(self.db.query(Match).count(), 0)
 
     def test_partial_response_reports_remaining_request_quantity(self):
         respond_to_request(

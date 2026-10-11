@@ -4,6 +4,12 @@ Foodys is a small database-driven food redistribution platform built for an acad
 
 The project primarily supports **SDG 2 — Zero Hunger** and also contributes to **SDG 12 — Responsible Consumption and Production**.
 
+## Problem statement
+
+Restaurants, individuals and other food providers may have safe surplus food, while nearby NGOs may need food but lack a simple way to discover and reserve it before it expires. Communication through calls or informal messages makes availability difficult to track and can result in delayed collection, duplicate reservations and avoidable food waste.
+
+Foodys provides one database-backed system in which donors publish surplus food or directly answer NGO requests. NGO members can reserve available food, manage requests and complete pickup and delivery. PostgreSQL keeps users, donations, requests, matches and deliveries connected and consistent throughout the workflow.
+
 ## What the system does
 
 Foodys supports two matching directions:
@@ -19,9 +25,9 @@ Match and delivery are created
 ```text
 NGO member posts a food request
         ↓
-Donor responds using an available donation
+Donor accepts all or part of the request
         ↓
-Match and delivery are created
+Donation, match and delivery are created atomically
 ```
 
 The assigned NGO member handles pickup and updates the delivery until it is completed.
@@ -38,7 +44,8 @@ A donor may be an individual or a restaurant. A donor can:
 - create a donation;
 - view, edit, or cancel their own available donations;
 - browse open food requests;
-- respond to a request using one of their donations;
+- accept all or part of an NGO request without first creating a separate listing;
+- view the delivery status of every allocated part of a donation;
 - view their matches.
 
 ### NGO member
@@ -68,6 +75,8 @@ There is no separate volunteer role. The NGO member assigned to a match is also 
 | Database access | SQLAlchemy and parameterized SQL |
 | Validation | Pydantic |
 | Styling | CSS |
+| Authentication | Email/password with PBKDF2-HMAC-SHA256 hashing and signed tokens |
+| API testing/documentation | FastAPI Swagger UI |
 | Version control | Git and GitHub |
 
 ## Project structure
@@ -85,7 +94,9 @@ resQfood/
 │   ├── main.py
 │   └── requirements.txt
 ├── database/
-│   └── schema.sql      # Complete PostgreSQL schema for a fresh database
+│   ├── schema.sql       # Complete PostgreSQL schema for a fresh database
+│   ├── seed.sql         # Repeatable demonstration records
+│   └── demo_queries.sql # JOIN, aggregate and index queries for pgAdmin
 ├── frontend/
 │   └── src/
 └── README.md
@@ -94,6 +105,16 @@ resQfood/
 ## Database design
 
 The project uses five main relational tables.
+
+```text
+users 1 ─── many donations
+users 1 ─── many food_requests
+donations 1 ─── many matches
+food_requests 1 ─── many matches (request_id may be NULL)
+users (NGO) 1 ─── many matches
+matches 1 ─── 1 deliveries
+users (NGO) 1 ─── many assigned deliveries
+```
 
 ### `users`
 
@@ -162,6 +183,20 @@ created_at, updated_at
 - `assigned_ngo_member_id` references `users.id`.
 - Only the assigned NGO member can view or update that delivery.
 
+### Keys and constraints
+
+- Every table has an integer primary key.
+- Foreign keys use `ON DELETE RESTRICT` to preserve referenced workflow records.
+- `users.email` is unique.
+- `deliveries.match_id` is unique, enforcing one delivery per match.
+- Quantities and allocated quantities must be greater than zero.
+- Donation expiry must be later than preparation time.
+- Request deadlines must be later than creation time.
+- `CHECK` constraints restrict user roles and every workflow status.
+- Indexes cover roles, ownership, status, category, location and expiry/deadline filters.
+
+The authoritative PostgreSQL definition is in `database/schema.sql`. SQLAlchemy models mirror the same tables, relationships and constraints.
+
 ## Status flow
 
 ### Donation
@@ -204,7 +239,7 @@ When an NGO member reserves food, the backend:
 5. updates the donation status;
 6. commits all changes together.
 
-When a donor responds to a request, the backend also locks the donation and request, validates the remaining quantities, creates the match and delivery, and updates both statuses in one transaction.
+When a donor accepts a request, the backend locks the request, checks its remaining quantity, creates a donation from the request and donor profile, and creates the match and delivery in one transaction. A partial acceptance keeps the request open; a full allocation marks it matched.
 
 If any step fails, the transaction is rolled back. Row locking and status checks prevent duplicate or excessive reservations.
 
@@ -215,10 +250,11 @@ The FastAPI documentation is available at `http://localhost:8000/docs` while the
 | Area | Endpoints |
 | --- | --- |
 | Authentication | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Donations | `POST /donations`, `GET /donations`, `GET /donations/my`, `GET/PUT/DELETE /donations/{id}` |
+| Donations | `POST /donations`, `GET /donations`, `GET /donations/my`, `GET /donations/my/allocations`, `GET/PUT/DELETE /donations/{id}` |
 | Requests | `POST /requests`, `GET /requests`, `GET /requests/my`, `GET/PUT/DELETE /requests/{id}` |
-| Matching | `POST /matches/reserve`, `POST /matches/respond`, `GET /matches`, `GET /matches/{id}` |
+| Matching | `POST /matches/reserve`, `POST /matches/accept-request`, `POST /matches/respond`, `GET /matches`, `GET /matches/{id}` |
 | Deliveries | `GET /deliveries/my`, `GET /deliveries/{id}`, `PATCH /deliveries/{id}/status` |
+| Statistics | `GET /statistics/impact` |
 
 Role and ownership checks are performed by FastAPI. Hiding a button in React is not treated as authorization.
 
@@ -231,15 +267,26 @@ Role and ownership checks are performed by FastAPI. Hiding a button in React is 
 - PostgreSQL
 - Git
 
-### 1. Create the PostgreSQL database
+### 1. Create and prepare PostgreSQL
 
 Create a local database, for example:
 
 ```sql
-CREATE DATABASE resqfood;
+CREATE DATABASE foodys_db;
 ```
 
-For a fresh database, run `database/schema.sql` using pgAdmin or `psql`.
+In pgAdmin, select `foodys_db`, open **Query Tool**, load `database/schema.sql`, and execute it. For repeatable demonstration records, load and execute `database/seed.sql` after the schema.
+
+All seeded accounts use the password `Demo@123`:
+
+```text
+donor1@foodys.demo
+donor2@foodys.demo
+ngo1@foodys.demo
+ngo2@foodys.demo
+```
+
+The seed script deletes and recreates only records connected to those four exact demo emails. It does not clear normal application data.
 
 ### 2. Configure the backend
 
@@ -256,7 +303,7 @@ Copy-Item .env.example .env
 Update `backend/.env` with your local values:
 
 ```env
-DATABASE_URL=postgresql://postgres:your_password@localhost:5432/resqfood
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/foodys_db
 SECRET_KEY=replace_with_a_long_random_development_secret
 FRONTEND_ORIGIN=http://localhost:5173
 ```
@@ -267,6 +314,12 @@ If the tables were not created using `schema.sql`, initialize missing tables wit
 
 ```powershell
 python init_db.py
+```
+
+For an existing project database, safely apply the included idempotent updates with:
+
+```powershell
+python update_database.py
 ```
 
 Start the backend:
@@ -281,7 +334,7 @@ Swagger UI: `http://localhost:8000/docs`
 
 ### 3. Start the frontend
 
-In another terminal:
+Open another PowerShell terminal from the project root:
 
 ```powershell
 cd frontend
@@ -290,6 +343,16 @@ npm run dev
 ```
 
 Frontend: `http://localhost:5173`
+
+### 4. Verify the database
+
+Open `database/demo_queries.sql` in pgAdmin Query Tool. Run its statements to demonstrate:
+
+- row counts for all five tables;
+- the multi-table delivery-history JOIN;
+- `COUNT`, `SUM` and `COUNT(DISTINCT ...)` aggregates;
+- active donors and NGOs;
+- PostgreSQL indexes.
 
 ## Tests
 
@@ -326,13 +389,17 @@ Completed backend work includes:
 - food-request CRUD and filtering;
 - supply-first and demand-first matching;
 - partial quantity matching;
+- direct donor acceptance that creates the donation and match atomically;
 - transactional match and delivery creation;
 - assigned NGO-member delivery access;
+- donor-visible allocation and delivery status history;
 - delivery state transitions and completion updates;
+- database-computed impact aggregates;
 - PostgreSQL constraints, foreign keys, indexes, and schema documentation;
+- repeatable demo data and pgAdmin demonstration queries;
 - backend automated tests.
 
-The React pages and styling exist, but several screens still contain temporary sample data. Connecting the frontend to the FastAPI endpoints is the main remaining task.
+The React interface is connected to the FastAPI API for authentication, donations, requests, matching, deliveries and impact statistics. PostgreSQL remains the authoritative source for workflow state.
 
 ## Two-person work division
 

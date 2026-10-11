@@ -6,9 +6,15 @@ from sqlalchemy.orm import Session
 
 from database.database import get_db
 from models.donation import Donation
+from models.deliveries import Deliveries
 from models.match import Match
 from models.user import User
-from schemas.donation import DonationCreate, DonationResponse, DonationUpdate
+from schemas.donation import (
+    DonationAllocationResponse,
+    DonationCreate,
+    DonationResponse,
+    DonationUpdate,
+)
 from utils.auth import get_current_user, require_roles
 
 
@@ -120,6 +126,40 @@ def list_my_donations(
 
     donations = db.scalars(query).all()
     return [attach_remaining_quantity(donation, db) for donation in donations]
+
+
+@router.get(
+    "/my/allocations",
+    response_model=list[DonationAllocationResponse],
+)
+def list_my_donation_allocations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("donor")),
+):
+    """Show delivery progress for every allocated part of a donor's food."""
+
+    rows = db.execute(
+        select(Match, Deliveries)
+        .join(Donation, Donation.id == Match.donation_id)
+        .join(Deliveries, Deliveries.match_id == Match.id)
+        .where(Donation.donor_id == current_user.id)
+        .order_by(Deliveries.created_at.desc())
+    ).all()
+
+    return [
+        DonationAllocationResponse(
+            match_id=match.id,
+            donation_id=match.donation_id,
+            request_id=match.request_id,
+            allocated_quantity=match.allocated_quantity,
+            match_status=match.status,
+            delivery_status=delivery.status,
+            assigned_at=delivery.assigned_at,
+            pickup_time=delivery.pickup_time,
+            delivery_time=delivery.delivery_time,
+        )
+        for match, delivery in rows
+    ]
 
 
 @router.get("/{donation_id}", response_model=DonationResponse)

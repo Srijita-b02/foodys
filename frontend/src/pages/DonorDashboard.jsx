@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import PageHeader from '../components/PageHeader'
 import StatusBadge from '../components/StatusBadge'
+import ImpactStats from '../components/ImpactStats'
 import { apiRequest } from '../api'
 
 function formatDate(value) {
@@ -126,6 +127,8 @@ function DonorDashboard({ token, onNavigate }) {
           </div>
         ))}
       </section>
+
+      <ImpactStats token={token} />
     </>
   )
 }

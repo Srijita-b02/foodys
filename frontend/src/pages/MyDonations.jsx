@@ -12,6 +12,7 @@ function formatDate(value) {
 
 function MyDonations({ token, onNavigate, onEdit }) {
   const [donations, setDonations] = useState([])
+  const [allocations, setAllocations] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [cancellingId, setCancellingId] = useState(null)
   const [message, setMessage] = useState('')
@@ -19,10 +20,14 @@ function MyDonations({ token, onNavigate, onEdit }) {
   useEffect(() => {
     let ignore = false
 
-    apiRequest('/donations/my', { token })
-      .then((data) => {
+    Promise.all([
+      apiRequest('/donations/my', { token }),
+      apiRequest('/donations/my/allocations', { token }),
+    ])
+      .then(([donationData, allocationData]) => {
         if (!ignore) {
-          setDonations(data)
+          setDonations(donationData)
+          setAllocations(allocationData)
         }
       })
       .catch((error) => {
@@ -93,44 +98,76 @@ function MyDonations({ token, onNavigate, onEdit }) {
           </p>
         )}
 
-        {donations.map((donation) => (
-          <div className="list-row" key={donation.id}>
-            <div>
-              <strong>{donation.food_name}</strong>
-              <p>
-                {donation.remaining_quantity ?? donation.quantity} of{' '}
-                {donation.quantity} {donation.unit} remaining · Expires{' '}
-                {formatDate(donation.expiry_time)}
-              </p>
+        {donations.map((donation) => {
+          const donationAllocations = allocations.filter(
+            (allocation) => allocation.donation_id === donation.id,
+          )
+
+          return (
+            <div className="list-row" key={donation.id}>
+              <div>
+                <strong>{donation.food_name}</strong>
+                <p>
+                  {donation.remaining_quantity ?? donation.quantity} of{' '}
+                  {donation.quantity} {donation.unit} remaining · Expires{' '}
+                  {formatDate(donation.expiry_time)}
+                </p>
+
+                {donationAllocations.length > 0 && (
+                  <div className="allocation-list">
+                    {donationAllocations.map((allocation) => (
+                      <div
+                        className="allocation-row"
+                        key={allocation.match_id}
+                      >
+                        <div>
+                          <span className="allocation-quantity">
+                            {allocation.allocated_quantity} {donation.unit}{' '}
+                            allocated
+                          </span>
+                          {allocation.delivery_time && (
+                            <span className="allocation-time">
+                              Delivered {formatDate(allocation.delivery_time)}
+                            </span>
+                          )}
+                        </div>
+                        <StatusBadge status={allocation.delivery_status} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="row-actions">
+                <StatusBadge status={donation.status} />
+
+                {donation.status === 'available' && (
+                  <>
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      disabled={cancellingId === donation.id}
+                      onClick={() => onEdit(donation.id)}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      className="danger-button"
+                      type="button"
+                      disabled={cancellingId === donation.id}
+                      onClick={() => cancelDonation(donation)}
+                    >
+                      {cancellingId === donation.id
+                        ? 'Cancelling...'
+                        : 'Cancel'}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-
-            <div className="row-actions">
-              <StatusBadge status={donation.status} />
-
-              {donation.status === 'available' && (
-                <>
-                  <button
-                    className="secondary-button compact-button"
-                    type="button"
-                    disabled={cancellingId === donation.id}
-                    onClick={() => onEdit(donation.id)}
-                  >
-                    Edit
-                  </button>
-
-                  <button
-                    className="danger-button"
-                    type="button"
-                    disabled={cancellingId === donation.id}
-                    onClick={() => cancelDonation(donation)}
-                  >
-                    {cancellingId === donation.id ? 'Cancelling...' : 'Cancel'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </section>
     </>
   )

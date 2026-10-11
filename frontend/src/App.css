@@ -884,6 +884,52 @@ select:focus {
   gap: 10px;
 }
 
+.allocation-list {
+  width: min(420px, 100%);
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.allocation-row {
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #eee9ed;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.allocation-quantity,
+.allocation-time {
+  display: block;
+  font-size: 11px;
+}
+
+.allocation-quantity {
+  color: #5f5861;
+  font-weight: 700;
+}
+
+.allocation-time {
+  margin-top: 2px;
+  color: #8a828a;
+}
+
+@media (max-width: 620px) {
+  .list-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .row-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
 .empty-state {
   margin: 0;
   padding: 28px 22px;

@@ -10,7 +10,12 @@ from models.donation import Donation
 from models.food_request import FoodRequest
 from models.match import Match
 from models.user import User
-from schemas.match import DirectReservationCreate, MatchResponse, RequestMatchCreate
+from schemas.match import (
+    DirectReservationCreate,
+    MatchResponse,
+    RequestAcceptanceCreate,
+    RequestMatchCreate,
+)
 from utils.auth import get_current_user, require_roles
 
 
@@ -222,6 +227,80 @@ def respond_to_request(
     return match
 
 
+def accept_request(
+    payload: RequestAcceptanceCreate,
+    db: Session,
+    current_user: User,
+) -> Match:
+    """Create donor supply and match it to an NGO request atomically."""
+
+    try:
+        food_request = db.scalar(
+            select(FoodRequest)
+            .where(FoodRequest.id == payload.request_id)
+            .with_for_update()
+        )
+
+        if food_request is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Food request does not exist.",
+            )
+
+        now = _current_time_for(food_request.needed_before)
+        if food_request.status != "open" or food_request.needed_before <= now:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Food request is no longer open.",
+            )
+
+        request_allocated = _allocated_for_request(db, food_request.id)
+        request_remaining = food_request.quantity - request_allocated
+
+        if payload.allocated_quantity > request_remaining:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Allocated quantity exceeds the request's remaining "
+                    f"quantity of {request_remaining}."
+                ),
+            )
+
+        donation = Donation(
+            donor_id=current_user.id,
+            food_name=food_request.food_name,
+            description=food_request.description,
+            category=food_request.category,
+            quantity=payload.allocated_quantity,
+            unit=food_request.unit,
+            prepared_at=now,
+            expiry_time=food_request.needed_before,
+            pickup_address=current_user.location,
+            status="available",
+        )
+        db.add(donation)
+        db.flush()
+
+        match = _create_match_and_delivery(
+            db,
+            donation=donation,
+            request_id=food_request.id,
+            ngo_member_id=food_request.ngo_id,
+            allocated_quantity=payload.allocated_quantity,
+        )
+
+        if request_allocated + payload.allocated_quantity >= food_request.quantity:
+            food_request.status = "matched"
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    db.refresh(match)
+    return match
+
+
 def _match_query_for_user(current_user: User):
     query = select(Match)
 
@@ -261,6 +340,19 @@ def api_respond_to_request(
     current_user: User = Depends(require_roles("donor")),
 ):
     return respond_to_request(payload, db, current_user)
+
+
+@router.post(
+    "/accept-request",
+    response_model=MatchResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def api_accept_request(
+    payload: RequestAcceptanceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("donor")),
+):
+    return accept_request(payload, db, current_user)
 
 
 @router.get("", response_model=list[MatchResponse])
